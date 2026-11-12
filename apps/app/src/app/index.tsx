@@ -20,7 +20,7 @@ import {
 import Check from "lucide-react-native/icons/check";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Head from "expo-router/head";
@@ -32,6 +32,7 @@ import {
   type TaskPatch,
 } from "@dodo/shared";
 import { api } from "../lib/api";
+import { parseTaskText } from "@dodo/shared/natural-language";
 
 function CompletionIcon() {
   const theme = useTheme();
@@ -45,6 +46,8 @@ export default function Tasks() {
   const [title, setTitle] = useState("");
   const [adding, setAdding] = useState(false);
   const [newDue, setNewDue] = useState<Due>(noDue);
+  const [newReference, setNewReference] = useState(() => new Date());
+  const [editReference, setEditReference] = useState(() => new Date());
   const [dueEditor, setDueEditor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -53,6 +56,21 @@ export default function Tasks() {
   const [editTitle, setEditTitle] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const editingTask = tasks.find((task) => task.id === editing);
+  const newParsed = useMemo(
+    () => parseTaskText(title, { due: newDue, now: newReference }),
+    [title, newDue, newReference],
+  );
+  const editParsed = useMemo(
+    () =>
+      parseTaskText(editTitle, {
+        due: editingTask ?? noDue,
+        now: editReference,
+      }),
+    [editTitle, editingTask, editReference],
+  );
+  const visibleError =
+    error || newParsed.error || (editing ? editParsed.error : "");
   const load = async () => {
     try {
       setTasks(await api.list());
@@ -126,38 +144,56 @@ export default function Tasks() {
   }
   async function finishEditing(task: Task) {
     if (editing !== task.id || savingTitles.current.has(task.id)) return;
-    if (!editTitle.trim()) {
-      setError("Task title cannot be empty.");
+    if (editParsed.error || !editParsed.title) {
+      setError(editParsed.error || "Add a task title as well as a deadline.");
       return;
     }
-    if (editTitle.trim() === task.title) {
+    if (editParsed.title === task.title && !editParsed.matches.length) {
       setEditing((current) => (current === task.id ? null : current));
       setDeleting((current) => (current === task.id ? null : current));
       return;
     }
     savingTitles.current.add(task.id);
     try {
-      await update(task, { title: editTitle });
+      await update(task, {
+        title: editParsed.title,
+        ...(editParsed.matches.length ? editParsed.due : {}),
+      });
     } finally {
       savingTitles.current.delete(task.id);
     }
   }
   async function saveDue(task: Task, due: Due) {
+    const extractedTitle =
+      editing === task.id && editParsed.matches.length
+        ? editParsed.title
+        : null;
     await mutate(async () => {
-      const saved = await api.update(task.id, due);
+      const saved = await api.update(task.id, {
+        dueKind: due.dueKind,
+        dueAt: due.dueAt,
+        timeZone: due.timeZone,
+      });
       setTasks((list) =>
         list.map((task) => (task.id === saved.id ? saved : task)),
       );
       setDueEditor((current) => (current === task.id ? null : current));
+      if (extractedTitle !== null) setEditTitle(extractedTitle);
     }, true);
   }
   async function addTask() {
     if (busy || loading || offline || !title.trim()) return;
+    if (newParsed.error || !newParsed.title) {
+      setError(newParsed.error || "Add a task title as well as a deadline.");
+      return;
+    }
+    const draft = newParsed;
     await mutate(async () => {
-      const saved = await api.create({ title, ...newDue });
+      const saved = await api.create({ title: draft.title, ...draft.due });
       setTasks((list) => [saved, ...list]);
       setTitle("");
       setNewDue(noDue);
+      setNewReference(new Date());
       setAdding(false);
       setDueEditor(null);
     });
@@ -166,6 +202,7 @@ export default function Tasks() {
     setError("");
     setEditing(task.id);
     setEditTitle(task.title);
+    setEditReference(new Date());
     setDueEditor(null);
     setDeleting(null);
   }
@@ -188,7 +225,7 @@ export default function Tasks() {
           <YStack flex={1} w="100%" maxW={900} self="center" p="4" gap="4">
             <H2>Dodo</H2>
             <H3>Tasks</H3>
-            {!!error && (
+            {!!visibleError && (
               <YStack
                 theme="red"
                 bg="background"
@@ -197,7 +234,7 @@ export default function Tasks() {
                 gap="3"
                 role="alert"
               >
-                <Paragraph>{error}</Paragraph>
+                <Paragraph>{visibleError}</Paragraph>
                 <Button
                   icon={RotateCw}
                   onPress={() => {
@@ -220,11 +257,17 @@ export default function Tasks() {
                   <TaskTitleInput
                     aria-label="New task"
                     placeholder="New task"
-                    onFocus={() => setAdding(true)}
+                    readOnly={busy}
+                    highlights={newParsed.matches}
+                    onFocus={() => {
+                      if (!adding && !title) setNewReference(new Date());
+                      setAdding(true);
+                    }}
                     maxLength={300}
                     value={title}
                     onChangeText={(text) => {
                       setTitle(text);
+                      setError("");
                       setAdding(true);
                     }}
                     onSubmitEditing={() => void addTask()}
@@ -245,9 +288,9 @@ export default function Tasks() {
                         setDueEditor(dueEditor === "new" ? null : "new")
                       }
                     >
-                      {newDue.dueKind === "none"
+                      {newParsed.due.dueKind === "none"
                         ? "Add date"
-                        : formatDue(newDue)}
+                        : formatDue(newParsed.due)}
                     </Button>
                   </XStack>
                 )}
@@ -294,6 +337,10 @@ export default function Tasks() {
                           aria-label={`Task title: ${item.title}`}
                           readOnly={busy}
                           maxLength={300}
+                          highlights={
+                            editing === item.id ? editParsed.matches : []
+                          }
+                          completed={item.completedAt !== null}
                           value={editing === item.id ? editTitle : item.title}
                           onFocus={() => {
                             if (editing !== item.id) beginEditing(item);
@@ -301,15 +348,10 @@ export default function Tasks() {
                           onChangeText={(text) => {
                             if (editing !== item.id) beginEditing(item);
                             setEditTitle(text);
+                            setError("");
                           }}
                           flex={1}
                           minW={0}
-                          style={{
-                            textDecorationLine:
-                              item.completedAt !== null
-                                ? "line-through"
-                                : "none",
-                          }}
                           onKeyDown={(event) => {
                             if (event.key === "Escape") cancelEditing();
                           }}
@@ -334,9 +376,9 @@ export default function Tasks() {
                                 setDeleting(null);
                               }}
                             >
-                              {item.dueKind === "none"
+                              {editParsed.due.dueKind === "none"
                                 ? "Add date"
-                                : formatDue(item)}
+                                : formatDue(editParsed.due)}
                             </Button>
                             <Button
                               size="sm"
@@ -408,10 +450,11 @@ export default function Tasks() {
         </SafeAreaView>
         {dueEditor === "new" && (
           <DueDialog
-            due={newDue}
+            due={newParsed.due}
             busy={busy}
             onClose={() => setDueEditor(null)}
             onSave={async (due) => {
+              if (newParsed.matches.length) setTitle(newParsed.title);
               setNewDue(due);
               setDueEditor(null);
             }}
@@ -422,7 +465,7 @@ export default function Tasks() {
           .map((task) => (
             <DueDialog
               key={task.id}
-              due={task}
+              due={editing === task.id ? editParsed.due : task}
               busy={busy}
               onClose={() => setDueEditor(null)}
               onSave={(due) => saveDue(task, due)}

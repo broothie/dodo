@@ -114,5 +114,11 @@ export function formatDue(due: Due): string {
       month: "short",
       day: "numeric",
     });
-  return `${new Intl.DateTimeFormat(undefined, { timeZone: due.timeZone, year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(due.dueAt))} (${due.timeZone})`;
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(due.dueAt));
 }

@@ -5,12 +5,14 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./scheduling": "./src/scheduling.ts"
+    "./scheduling": "./src/scheduling.ts",
+    "./natural-language": "./src/natural-language.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@js-temporal/polyfill": "^0.5.1"
+    "@js-temporal/polyfill": "^0.5.1",
+    "chrono-node": "^2.10.3"
   }
 }
