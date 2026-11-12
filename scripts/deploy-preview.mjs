@@ -75,7 +75,9 @@ async function deploy() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  deploy().catch(() => {
+  deploy().catch((error) => {
+    // Configuration failures happen before Wrangler runs; keep their reason visible.
+    console.error(error.message.split('\n')[0]);
     console.error('Preview deployment failed. See the Wrangler output above; production was not deployed.');
     process.exitCode = 1;
   });
