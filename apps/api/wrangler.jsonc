@@ -13,6 +13,7 @@
 		"AUTH_EMAIL_DEV_URL": ""
 	},
 	"workers_dev": true,
+	"preview_urls": true,
 	"routes": [{ "pattern": "dodotasks.xyz", "custom_domain": true }],
 	"secrets": { "required": ["BETTER_AUTH_SECRET", "RESEND_API_KEY"] },
 	"assets": {
@@ -31,6 +32,15 @@
 			"database_id": "2c2d038d-db07-43cd-8c3b-8a81f38536de"
 		}
 	],
+	"previews": {
+		"vars": {
+			"BETTER_AUTH_URL": "https://preview.invalid",
+			"BETTER_AUTH_ADDITIONAL_ORIGINS": "",
+			"AUTH_EMAIL_FROM": "Dodo Preview <login@dodotasks.xyz>",
+			"AUTH_EMAIL_DEV_URL": ""
+		},
+		"d1_databases": []
+	},
 	"observability": {
 		"enabled": true,
 		"head_sampling_rate": 1

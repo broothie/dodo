@@ -96,13 +96,24 @@ Cloudflare Workers Builds is connected to `broothie/dodo` and the existing `dodo
 | Root directory | Repository root (`/`) |
 | Build command | `npm run build:ci` |
 | Deploy command | `npm run deploy:ci` |
-| Non-production branch builds | Disabled |
+| Preview command | `npm run deploy:preview` |
+| Non-production branch builds | Enabled |
 
 Cloudflare installs npm dependencies from the lockfile and reads Node 24 from `.nvmrc`. Each push to `main` runs typechecking, lint, unit tests, and the web/PWA build. Only after those succeed does deployment apply pending **production** D1 migrations and publish the Worker and assets to `https://dodotasks.xyz`. A failed check or migration stops deployment. Keep migrations compatible with the currently deployed Worker, since migrations run before the new code goes live.
 
 The `Dodo production builds` token is restricted to Workers Scripts edit, D1 edit, and Account Settings read for this account; Workers Routes edit and Zone read for `dodotasks.xyz`; and User Details/Memberships read for identity discovery. Cloudflare stores the build credential. Runtime secrets (`BETTER_AUTH_SECRET` and `RESEND_API_KEY`) stay on the existing Worker; they are not build variables or frontend configuration. Build history and retries are available in the [Worker's Deployments tab](https://dash.cloudflare.com/ff9d49775ec143561efdaf9d88089845/workers/services/view/dodo/production/deployments), and Cloudflare reports build status on GitHub commits.
 
 `npm run build:ci` can also validate a build locally without deploying. `npm run deploy:ci` is a production operation and assumes the frontend has already been built.
+
+### Pull request previews
+
+Cloudflare builds branches outside `main` with the same checks and posts a Preview URL on their pull requests. Each branch gets a stable Preview URL and its own D1 database, created and migrated by `npm run deploy:preview`. Further pushes reuse that branch's database and update its Preview. Preview deployment refuses `main` and production database IDs. Cloudflare's native Previews deploy under the existing `dodo` Worker; they do not replace its production deployment.
+
+`scripts/deploy-preview.mjs` generates an ignored configuration with the branch database in both its migration and Preview bindings. Names include a hash of the original branch name to distinguish branches whose URL slugs match. The checked-in `previews` block intentionally has no default database, so a bare `wrangler preview` cannot fall back to production D1. Run the script after `npm run build:ci`; Workers Builds provides the branch as `WORKERS_CI_BRANCH`, with the local Git branch used outside CI.
+
+Preview URLs are public, with normal Dodo sign-in still required for tasks. Create an **email/password** account separately on each branch; production users and tasks are not copied. Previews receive an independent `BETTER_AUTH_SECRET` from Cloudflare's Previews Base secrets. They have no Resend credential, so email code and magic-link delivery are unavailable. Never use a production password or real task data in a preview. To rotate the shared preview secret, use `npm exec -w @dodo/api -- wrangler preview base-config secret put BETTER_AUTH_SECRET`; Base secret changes apply to newly created Previews.
+
+D1 databases are account resources: deleting a Preview or closing a PR does not automatically delete its database. Preview databases use the `dodo-preview-<branch-hash>` prefix. Retire them manually with the corresponding Preview when no longer needed; the Free plan's database quota also applies to previews. No paid plan is enabled by this setup.
 
 ## Native next steps
 
