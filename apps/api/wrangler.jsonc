@@ -6,8 +6,15 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	"vars": { "BETTER_AUTH_URL": "https://dodo.adbooth.workers.dev" },
-	"secrets": { "required": ["BETTER_AUTH_SECRET"] },
+	"vars": {
+		"BETTER_AUTH_URL": "https://dodotasks.xyz",
+		"BETTER_AUTH_ADDITIONAL_ORIGINS": "https://dodo.adbooth.workers.dev",
+		"AUTH_EMAIL_FROM": "Dodo <login@dodotasks.xyz>",
+		"AUTH_EMAIL_DEV_URL": ""
+	},
+	"workers_dev": true,
+	"routes": [{ "pattern": "dodotasks.xyz", "custom_domain": true }],
+	"secrets": { "required": ["BETTER_AUTH_SECRET", "RESEND_API_KEY"] },
 	"assets": {
 		"directory": "../app/dist",
 		"binding": "ASSETS",

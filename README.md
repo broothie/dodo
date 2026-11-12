@@ -36,7 +36,15 @@ The first sign-in on a previously anonymous installation imports its existing ta
 
 `npm run dev` creates an ignored `apps/api/.dev.vars` with a random development-only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL=http://localhost:8787`. Keep that secret stable across restarts. `npm run preview` uses the same file; run `node scripts/setup-local-auth.mjs` first on a fresh checkout. Production must have its own secret and canonical public URL; missing configuration fails closed.
 
-Email verification, password-reset email, social login, and account deletion are not implemented yet. Sign-up currently allows unverified email addresses. There is no outbound email service configured.
+Email code login and magic links use Better Auth with Resend. The default sign-in screen sends a six-digit code; users can choose a sign-in link or the existing password flow. Email login creates an account on first use and verifies email ownership. Codes and links expire after five minutes and are stored hashed in D1. Codes allow three attempts; resending rotates the code. Both methods have server-side send/verification rate limits and atomic single-use redemption.
+
+Magic links open `/auth/verify` and require a confirmation click before redemption. A normal page visit or email scanner cannot consume a token. The confirmation request uses a dedicated header and origin checks. Invalid, expired, and already-used links show a recoverable error. The authenticated email is checked against the link's email hint before opening tasks and importing any legacy list. Link pages send `Referrer-Policy: no-referrer`.
+
+On first email ownership verification, Better Auth revokes access created before that verification, including unverified passwords and sessions, while retaining the account and its tasks. A previously unverified password account can continue using email sign-in afterward. Password reset and email-change screens, social login, and account deletion are not implemented. Native email codes use SecureStore through the Expo adapter; native universal/app links still need configuring before a native release.
+
+Production sends from `Dodo <login@dodotasks.xyz>` through Resend using the `RESEND_API_KEY` Worker secret. That key is sending-only and restricted to `dodotasks.xyz`; the domain is verified in Resend. There is no Cloudflare Email Sending binding or Paid-plan requirement. Configure the secret with `npm exec -w @dodo/api -- wrangler secret put RESEND_API_KEY` for another deployment; never put it in `vars` or the frontend.
+
+Local `npm run dev` captures messages in memory at `http://localhost:8787/__dev/mail`; no real email is sent and no production Resend key is needed. The generated `.dev.vars` points `AUTH_EMAIL_DEV_URL` there and uses an unused placeholder key. Only a loopback auth URL can use this capture transport. The endpoint exists only in the local dev proxy, rejects cross-origin access, keeps the latest 50 messages, and clears on restart. `npm run preview` has no capture server; use normal development to test email locally, or explicitly configure delivery for preview.
 
 ## PWA
 
@@ -51,6 +59,7 @@ npm test
 npm run build
 # With the app running on port 8787:
 node --experimental-strip-types tests/api-smoke.mts
+node --experimental-strip-types tests/passwordless-smoke.mts
 ```
 
 ## Cloudflare deployment
@@ -62,7 +71,7 @@ npm exec -w @dodo/api -- wrangler d1 create dodo
 
 The existing `DB` binding in `apps/api/wrangler.jsonc` already points to the created `dodo` database. For another account, replace its `database_id` with the returned ID.
 
-`vars.BETTER_AUTH_URL` is set to `https://dodo.adbooth.workers.dev`. If the app moves to a custom domain, update it to the new exact HTTPS origin. Web and API must share that origin. Configure a separate random production secret of at least 32 characters using the interactive prompt below; do not commit the secret. `wrangler secret put` changes the deployed Worker, so do this as part of the deployment operation.
+`vars.BETTER_AUTH_URL` is set to `https://dodotasks.xyz`, matching the Worker custom domain in `routes`. Cloudflare manages DNS and the HTTPS certificate for that domain; the original `workers.dev` endpoint remains available as a migration fallback. `BETTER_AUTH_ADDITIONAL_ORIGINS` explicitly allows that origin for authentication; local development ignores production fallback origins. If the app moves again, update both the domain route and auth URL. Web and API must share that origin. Configure a separate random production secret of at least 32 characters using the interactive prompt below; do not commit the secret. `wrangler secret put` changes the deployed Worker, so do this as part of the deployment operation.
 
 ```sh
 npm exec -w @dodo/api -- wrangler secret put BETTER_AUTH_SECRET

@@ -2,6 +2,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import './setup-local-auth.mjs';
+import { devMail } from './dev-mail.mjs';
 
 const npm = process.env.npm_execpath;
 if (!npm) throw new Error('Start development with npm run dev.');
@@ -32,6 +33,10 @@ function run(args, env = {}) {
 const retirementWorker = await readFile(new URL('./retire-service-worker.js', import.meta.url));
 const server = http.createServer((request, response) => {
   response.setHeader('Cache-Control', 'no-store');
+  if (new URL(request.url, 'http://localhost').pathname === '/__dev/mail') {
+    void devMail(request, response);
+    return;
+  }
   if (new URL(request.url, 'http://localhost').pathname === '/sw.js') {
     response.writeHead(200, { 'Content-Type': 'application/javascript', 'Service-Worker-Allowed': '/' });
     response.end(retirementWorker);
