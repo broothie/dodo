@@ -1,0 +1,18 @@
+{
+  "name": "@dodo/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "db:migrate": "wrangler d1 migrations apply dodo --local",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@dodo/shared": "*"
+  },
+  "devDependencies": {
+    "wrangler": "latest",
+    "@cloudflare/workers-types": "latest"
+  }
+}

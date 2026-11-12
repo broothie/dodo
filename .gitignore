@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+dist/
+.wrangler/
+.env*
+!.env.example
+.dev.vars*
+*.tsbuildinfo
+.DS_Store
+.playwright-mcp/

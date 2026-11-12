@@ -1,0 +1,31 @@
+{
+  "name": "dodo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:app": "npm run start -w @dodo/app",
+    "build": "npm run build -w @dodo/app",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint -w @dodo/app",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "db:migrate": "npm run db:migrate -w @dodo/api",
+    "deploy": "npm run build && npm run deploy -w @dodo/api",
+    "preview": "npm run build && npm run db:migrate && npm run dev -w @dodo/api"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^58.0.4",
+    "node": "^24.22.2",
+    "sharp": "^0.35.5",
+    "typescript": "~6.0.3",
+    "workbox-build": "^7.4.1"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=24.3.0 <25 || >=26"
+  }
+}
