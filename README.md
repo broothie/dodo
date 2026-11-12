@@ -88,7 +88,7 @@ Web and API share a single origin. `/api/*` always runs through the Worker; othe
 
 ### Automatic deployments
 
-Cloudflare Workers Builds connects `broothie/dodo` to the existing `dodo` Worker. Configure its build settings as follows:
+Cloudflare Workers Builds is connected to `broothie/dodo` and the existing `dodo` Worker with these settings:
 
 | Setting | Value |
 | --- | --- |
@@ -100,7 +100,7 @@ Cloudflare Workers Builds connects `broothie/dodo` to the existing `dodo` Worker
 
 Cloudflare installs npm dependencies from the lockfile and reads Node 24 from `.nvmrc`. Each push to `main` runs typechecking, lint, unit tests, and the web/PWA build. Only after those succeed does deployment apply pending **production** D1 migrations and publish the Worker and assets to `https://dodotasks.xyz`. A failed check or migration stops deployment. Keep migrations compatible with the currently deployed Worker, since migrations run before the new code goes live.
 
-The build API token needs Workers deployment and D1 edit permissions for this account, plus Workers Routes access for the custom domain. Runtime secrets (`BETTER_AUTH_SECRET` and `RESEND_API_KEY`) stay on the existing Worker; they are not build variables or frontend configuration. Build history and retries are available in the Worker's Deployments tab, and Cloudflare reports build status on GitHub commits.
+The `Dodo production builds` token is restricted to Workers Scripts edit, D1 edit, and Account Settings read for this account; Workers Routes edit and Zone read for `dodotasks.xyz`; and User Details/Memberships read for identity discovery. Cloudflare stores the build credential. Runtime secrets (`BETTER_AUTH_SECRET` and `RESEND_API_KEY`) stay on the existing Worker; they are not build variables or frontend configuration. Build history and retries are available in the [Worker's Deployments tab](https://dash.cloudflare.com/ff9d49775ec143561efdaf9d88089845/workers/services/view/dodo/production/deployments), and Cloudflare reports build status on GitHub commits.
 
 `npm run build:ci` can also validate a build locally without deploying. `npm run deploy:ci` is a production operation and assumes the frontend has already been built.
 
