@@ -1,5 +1,6 @@
 import Calendar from "lucide-react-native/icons/calendar";
 import { DueDialog } from "../components/due-dialog";
+import { TaskTitleInput } from "../components/task-title-input";
 import {
   OutsideEditProvider,
   TaskEditBoundary,
@@ -9,7 +10,6 @@ import {
   Checkbox,
   H2,
   H3,
-  Input,
   Paragraph,
   Spinner,
   XStack,
@@ -217,10 +217,8 @@ export default function Tasks() {
               <YStack bg="white">
                 <XStack items="center" gap="3" py="3">
                   <Checkbox disabled aria-hidden={true} />
-                  <Input
+                  <TaskTitleInput
                     aria-label="New task"
-                    bg="white"
-                    borderWidth={0}
                     placeholder="New task"
                     onFocus={() => setAdding(true)}
                     maxLength={300}
@@ -292,49 +290,33 @@ export default function Tasks() {
                             <CompletionIcon />
                           </Checkbox.Indicator>
                         </Checkbox>
-                        {editing === item.id ? (
-                          <Input
-                            aria-label="Edit task title"
-                            bg="white"
-                            borderWidth={0}
-                            readOnly={busy}
-                            autoFocus
-                            maxLength={300}
-                            value={editTitle}
-                            onChangeText={setEditTitle}
-                            flex={1}
-                            minW={0}
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape") cancelEditing();
-                            }}
-                            onSubmitEditing={() => {
-                              void finishEditing(item);
-                            }}
-                          />
-                        ) : (
-                          <Paragraph
-                            role="button"
-                            aria-label={`Edit ${item.title}`}
-                            tabIndex={0}
-                            cursor="pointer"
-                            flex={1}
-                            minW={0}
-                            onPress={() => beginEditing(item)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                beginEditing(item);
-                              }
-                            }}
-                            textDecorationLine={
+                        <TaskTitleInput
+                          aria-label={`Task title: ${item.title}`}
+                          readOnly={busy}
+                          maxLength={300}
+                          value={editing === item.id ? editTitle : item.title}
+                          onFocus={() => {
+                            if (editing !== item.id) beginEditing(item);
+                          }}
+                          onChangeText={(text) => {
+                            if (editing !== item.id) beginEditing(item);
+                            setEditTitle(text);
+                          }}
+                          flex={1}
+                          minW={0}
+                          style={{
+                            textDecorationLine:
                               item.completedAt !== null
                                 ? "line-through"
-                                : "none"
-                            }
-                          >
-                            {item.title}
-                          </Paragraph>
-                        )}
+                                : "none",
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Escape") cancelEditing();
+                          }}
+                          onSubmitEditing={() => {
+                            void finishEditing(item);
+                          }}
+                        />
                       </XStack>
                       {editing === item.id && (
                         <YStack gap="3" pb="3" pl="9">
