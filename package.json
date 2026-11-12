@@ -9,11 +9,13 @@
     "dev": "node scripts/dev.mjs",
     "dev:app": "npm run start -w @dodo/app",
     "build": "npm run build -w @dodo/app",
+    "build:ci": "npm run typecheck && npm run lint && npm test && npm run build",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint -w @dodo/app",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "db:migrate": "npm run db:migrate -w @dodo/api",
     "deploy": "npm run build && npm run deploy -w @dodo/api",
+    "deploy:ci": "npm run db:migrate:remote -w @dodo/api && npm run deploy -w @dodo/api",
     "preview": "npm run build && npm run db:migrate && npm run dev -w @dodo/api"
   },
   "devDependencies": {
