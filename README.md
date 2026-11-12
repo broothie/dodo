@@ -11,13 +11,13 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:8787. One command starts Expo/Metro with Fast Refresh, the Workers API, and a local development proxy. Frontend saves appear automatically; Wrangler reloads API changes. The proxy sends `Cache-Control: no-store`, and localhost never registers a PWA service worker. Any older localhost PWA worker is retired automatically. Your browser workspace key and local D1 data are preserved.
+Open http://localhost:8787. One command starts Expo/Metro with Fast Refresh, the Workers API, and a local development proxy. Frontend saves appear automatically; Wrangler reloads API changes. The proxy sends `Cache-Control: no-store`, and localhost never registers a PWA service worker. Any older localhost PWA worker is retired automatically. Local D1 data and the development session secret are preserved across restarts.
 
 Tasks persist in `apps/api/.wrangler/state`; no Cloudflare account is needed locally. The frontend and API share port 8787, with Metro on 8081 and Wrangler on 8788 behind the proxy. Stop all three with Ctrl+C.
 
 To inspect the production web export separately, stop development and run `npm run preview`. This builds and serves the static frontend on port 8787; edits require another build. Offline PWA caching is enabled on deployed hosts, not localhost.
 
-For native development, use `npm run dev:app` and set `EXPO_PUBLIC_API_URL` to your computer's LAN address and API port. Localhost on a phone refers to the phone itself. Use a development build for SDK 58 native testing.
+For native development, use `npm run dev:app` and set `EXPO_PUBLIC_API_URL` to your computer's LAN address and API port. Set local `BETTER_AUTH_URL` to that same API origin in `apps/api/.dev.vars`; it is also the trusted origin for auth. Localhost on a phone refers to the phone itself. Use a development build for SDK 58 native testing.
 
 ## Layout
 
@@ -28,7 +28,15 @@ For native development, use `npm run dev:app` and set `EXPO_PUBLIC_API_URL` to y
 
 The first version supports task creation by pressing Enter, inline title editing, completion, deletion with confirmation. Completed tasks remain in the list below incomplete tasks. It starts empty and stores real data in D1.
 
-Each installation creates a random workspace bearer key. On web it lives in localStorage; native uses Expo SecureStore. The API stores only its SHA-256 hash and scopes every SQL query to it. This is anonymous, device-local identity: clearing browser storage loses access, and other devices have separate task lists. Account sign-in, workspace recovery, sharing, rate limits, and cross-device sync remain future work. Keep the workspace key private.
+## Accounts
+
+Email/password accounts use Better Auth on the Worker, with users, hashed passwords, sessions, and auth rate limits in D1. All task queries require a valid session and scope ownership to its user ID. Signing in on another device opens the same task list. Web sessions use HttpOnly cookies; native uses Better Auth's Expo client and SecureStore. Sign-out revokes the current session in D1. Session responses and task data are never cached.
+
+The first sign-in on a previously anonymous installation imports its existing tasks using the old workspace key, then removes that key. Import is atomic and a key can only be claimed by one account; it no longer grants access to task CRUD. Other devices' old anonymous lists are imported when the same account signs in there.
+
+`npm run dev` creates an ignored `apps/api/.dev.vars` with a random development-only `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL=http://localhost:8787`. Keep that secret stable across restarts. `npm run preview` uses the same file; run `node scripts/setup-local-auth.mjs` first on a fresh checkout. Production must have its own secret and canonical public URL; missing configuration fails closed.
+
+Email verification, password-reset email, social login, and account deletion are not implemented yet. Sign-up currently allows unverified email addresses. There is no outbound email service configured.
 
 ## PWA
 
@@ -52,7 +60,15 @@ npm exec -w @dodo/api -- wrangler login
 npm exec -w @dodo/api -- wrangler d1 create dodo
 ```
 
-Copy the returned `database_id` into the existing D1 binding in `apps/api/wrangler.jsonc`, then:
+The existing `DB` binding in `apps/api/wrangler.jsonc` already points to the created `dodo` database. For another account, replace its `database_id` with the returned ID.
+
+`vars.BETTER_AUTH_URL` is set to `https://dodo.adbooth.workers.dev`. If the app moves to a custom domain, update it to the new exact HTTPS origin. Web and API must share that origin. Configure a separate random production secret of at least 32 characters using the interactive prompt below; do not commit the secret. `wrangler secret put` changes the deployed Worker, so do this as part of the deployment operation.
+
+```sh
+npm exec -w @dodo/api -- wrangler secret put BETTER_AUTH_SECRET
+```
+
+Apply all migrations, including `0005_accounts.sql`, and deploy:
 
 ```sh
 npm exec -w @dodo/api -- wrangler d1 migrations apply dodo --remote
@@ -63,7 +79,7 @@ Web and API share a single origin. `/api/*` always runs through the Worker; othe
 
 ## Native next steps
 
-The screens already use React Native primitives. Configure `EXPO_PUBLIC_API_URL` with your HTTPS Worker URL, choose iOS/Android application identifiers in app.json, and use Expo development builds. Test on actual native devices before releasing. Platform-specific workspace storage and PWA registration are isolated in `.web.ts` adapters. Native builds have not yet been verified.
+The screens already use React Native primitives. Configure `EXPO_PUBLIC_API_URL` with your HTTPS Worker URL, choose iOS/Android application identifiers in app.json, and use Expo development builds. Test on actual native devices before releasing. Platform-specific auth clients, legacy workspace storage, and PWA registration are isolated in `.web.ts` adapters. Native builds have not yet been verified.
 
 ## Task completion
 

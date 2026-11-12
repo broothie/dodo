@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import './setup-local-auth.mjs';
 
 const npm = process.env.npm_execpath;
 if (!npm) throw new Error('Start development with npm run dev.');

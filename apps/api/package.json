@@ -9,10 +9,12 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@dodo/shared": "*"
+    "@better-auth/expo": "^1.7.22",
+    "@dodo/shared": "*",
+    "better-auth": "^1.7.22"
   },
   "devDependencies": {
-    "wrangler": "latest",
-    "@cloudflare/workers-types": "latest"
+    "@cloudflare/workers-types": "latest",
+    "wrangler": "latest"
   }
 }

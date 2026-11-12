@@ -71,14 +71,15 @@ export function parseTaskInput(value: unknown, partial = false): TaskPatch {
 
 export function createTaskClient(
   baseUrl: string,
-  getToken: () => Promise<string>,
+  getHeaders: () => Promise<Record<string, string>>,
 ) {
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${baseUrl}/api/tasks${path}`, {
       ...init,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${await getToken()}`,
+        ...(await getHeaders()),
       },
     });
     if (!response.ok) {

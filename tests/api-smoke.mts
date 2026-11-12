@@ -1,14 +1,35 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import { readdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 const base = process.env.API_URL ?? "http://localhost:8787";
-const token = () =>
-  (crypto.randomUUID() + crypto.randomUUID()).replaceAll("-", "");
-const owner = token(),
-  stranger = token();
+const password = crypto.randomUUID() + "!";
+const suffix = crypto.randomUUID();
+async function authRequest(path: string, body: unknown, cookie = "") {
+  return fetch(`${base}/api/auth/${path}`, {
+    method: "POST", headers: { "Content-Type": "application/json", Origin: base, Cookie: cookie },
+    body: JSON.stringify(body),
+  });
+}
+async function signUp(label: string) {
+  const email = `${label}-${suffix}@example.test`;
+  const response = await authRequest("sign-up/email", { name: label, email, password });
+  assert.equal(response.status, 200, await response.clone().text());
+  const cookie = response.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
+  assert.ok(cookie);
+  assert.match(response.headers.get("set-cookie")!, /HttpOnly/i);
+  assert.match(response.headers.get("set-cookie")!, /SameSite=Lax/i);
+  return { email, cookie, id: (await response.json()).user.id };
+}
+const account = await signUp("smoke-owner");
+const other = await signUp("smoke-stranger");
+const owner = account.cookie, stranger = other.cookie;
 async function request(path = "", method = "GET", body?: unknown, key = owner) {
   return fetch(`${base}/api/tasks${path}`, {
     method,
     headers: {
-      Authorization: `Bearer ${key}`,
+      Cookie: key,
+      Origin: base,
       "Content-Type": "application/json",
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -126,7 +147,7 @@ if (process.env.CHECK_PWA === "1") {
   assert.equal((await fetch(`${base}/sw.js`)).status, 200);
 }
 console.log(
-  "API smoke passed: CRUD, validation, workspace isolation, and deletion.",
+  "API smoke passed: CRUD, validation, account isolation, and deletion.",
 );
 
 const preflight = await fetch(`${base}/api/tasks`, {
@@ -136,10 +157,10 @@ const preflight = await fetch(`${base}/api/tasks`, {
     "Access-Control-Request-Headers": "authorization,content-type",
   },
 });
-assert.equal(preflight.status, 204);
+assert.equal(preflight.status, new URL(base).hostname === "localhost" || new URL(base).hostname === "127.0.0.1" ? 204 : 401);
 assert.equal(
   preflight.headers.get("Access-Control-Allow-Origin"),
-  "http://localhost:8081",
+  ["localhost", "127.0.0.1"].includes(new URL(base).hostname) ? "http://localhost:8081" : null,
 );
 const untrusted = await fetch(`${base}/api/tasks`, {
   method: "OPTIONS",
@@ -147,3 +168,70 @@ const untrusted = await fetch(`${base}/api/tasks`, {
 });
 assert.equal(untrusted.headers.get("Access-Control-Allow-Origin"), null);
 console.log("Development CORS allowlist passed.");
+
+const invalid = await authRequest("sign-in/email", { email: account.email, password: "incorrect-password" });
+assert.equal(invalid.status, 401);
+const signedIn = await authRequest("sign-in/email", { email: account.email, password });
+assert.equal(signedIn.status, 200);
+const secondCookie = signedIn.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
+assert.deepEqual(await (await request("", "GET", undefined, secondCookie)).json(), []);
+const forbidden = await fetch(`${base}/api/tasks`, {method:"POST", headers: {Cookie:owner, Origin:"https://evil.example", "Content-Type":"application/json"},body:JSON.stringify({title:"CSRF"})});
+assert.equal(forbidden.status,403);
+assert.equal((await fetch(`${base}/api/tasks`, {headers:{Authorization:`Bearer ${"a".repeat(64)}`}})).status,401);
+// Seed only a disposable legacy fixture in the local D1 database. Remote smoke
+// runs do not inspect or modify local state.
+if (["localhost", "127.0.0.1"].includes(new URL(base).hostname)) {
+  const folder = "apps/api/.wrangler/state/v3/d1/miniflare-D1DatabaseObject";
+  const databases = readdirSync(folder).filter(file => file.endsWith(".sqlite") && file !== "metadata.sqlite");
+  let db: DatabaseSync | undefined;
+  for (const file of databases) {
+    const candidate = new DatabaseSync(`${folder}/${file}`, { timeout: 5000 });
+    if (candidate.prepare("SELECT 1 FROM sqlite_master WHERE name = 'session'").get() && candidate.prepare("SELECT 1 FROM session WHERE token = ?").get(
+      // Session cookies are signed; the DB token is the portion before the dot.
+      decodeURIComponent(owner.split("=")[1].split(";")[0]).split(".")[0],
+    )) { db = candidate; break; }
+    candidate.close();
+  }
+  assert.ok(db, "Could not locate the local session database");
+  const credential = db.prepare("SELECT password FROM account JOIN user ON user.id = account.userId WHERE user.email = ?").get(account.email);
+  assert.equal(typeof credential?.password, "string");
+  assert.notEqual(credential?.password, password);
+  assert.ok(Number(db.prepare('SELECT count(*) AS count FROM rateLimit').get()?.count) > 0);
+  const legacyToken = (crypto.randomUUID() + crypto.randomUUID()).replaceAll("-", "");
+  const hash = createHash("sha256").update(legacyToken).digest("hex");
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO tasks (id, owner, title, due_kind, created_at, updated_at) VALUES (?, ?, ?, 'none', ?, ?)").run(id, hash, "Legacy import fixture", now, now);
+  const claim = (cookie: string, token = legacyToken) => fetch(`${base}/api/tasks/claim`, { method:"POST",headers:{Cookie:cookie,Origin:base,Authorization:`Bearer ${token}`} });
+  try {
+    assert.equal((await fetch(`${base}/api/tasks/claim`, {method:"POST",headers:{Authorization:`Bearer ${legacyToken}`,Origin:base}})).status,401);
+    assert.equal((await claim(owner)).status,200);
+    assert.equal((await claim(owner)).status,200);
+    assert.equal((await claim(stranger)).status,409);
+    const imported = await (await request("", "GET", undefined, secondCookie)).json();
+    assert.equal(imported.length,1);
+    assert.equal(imported[0].id,id);
+    assert.deepEqual(await (await request("", "GET", undefined, stranger)).json(),[]);
+    const raceToken = (crypto.randomUUID() + crypto.randomUUID()).replaceAll("-", "");
+    const race = await Promise.all([claim(owner,raceToken),claim(stranger,raceToken)]);
+    assert.deepEqual(race.map(response => response.status).sort(),[200,409]);
+    const strangerToken = decodeURIComponent(stranger.split("=")[1].split(";")[0]).split(".")[0];
+    db.prepare('UPDATE session SET expiresAt = 1 WHERE token = ?').run(strangerToken);
+    assert.equal((await request("", "GET", undefined, stranger)).status, 401);
+    console.log("Legacy import passed: authenticated, idempotent, isolated, and single-winner under concurrent claims.");
+  } finally {
+    db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+    db.close();
+  }
+}
+assert.equal((await authRequest("sign-out", {}, owner)).status,200);
+assert.equal((await request("", "GET")).status,401);
+assert.equal((await request("", "GET", undefined, secondCookie)).status,200);
+assert.equal((await authRequest("sign-out", {}, secondCookie)).status,200);
+assert.equal((await authRequest("sign-out", {}, stranger)).status,200);
+console.log("Auth smoke passed: password rejection, multi-device sign-in, CSRF protection, no bearer bypass, and session revocation.");
+
+// IDs only: deployment verification can remove its disposable accounts through
+// D1 without writing session cookies or passwords to a file.
+if (process.env.SMOKE_REPORT)
+  writeFileSync(process.env.SMOKE_REPORT, JSON.stringify({ userIds: [account.id, other.id] }));

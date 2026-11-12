@@ -1,3 +1,4 @@
+import { createAuth, trustedOrigins } from "./auth";
 import { parseTaskInput, parseDue, type Task } from "@dodo/shared";
 
 type Row = {
@@ -33,24 +34,79 @@ const app = {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
-    if (
-      url.pathname !== "/api/tasks" &&
-      !/^\/api\/tasks\/[a-f0-9-]{36}$/.test(url.pathname)
-    )
-      return json({ error: "Not found." }, 404);
-    const token = request.headers
-      .get("Authorization")
-      ?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
-    if (!token) return json({ error: "A workspace key is required." }, 401);
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(token),
-    );
-    const owner = Array.from(new Uint8Array(digest), (byte) =>
-      byte.toString(16).padStart(2, "0"),
-    ).join("");
-    const id = url.pathname.split("/")[3];
     try {
+      // Custom task routes use cookies too, so enforce origins on mutations.
+      if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+        const origin = request.headers.get("Origin");
+        if (
+          (origin && !trustedOrigins(env.BETTER_AUTH_URL).includes(origin)) ||
+          request.headers.get("Sec-Fetch-Site") === "cross-site"
+        )
+          return json({ error: "Untrusted request origin." }, 403);
+      }
+      const auth = createAuth(env);
+      if (url.pathname.startsWith("/api/auth/")) {
+        let authRequest: Request = request;
+        // Auth accepts more fields than tasks, but still bound streamed bodies.
+        if (request.body) {
+          const reader = request.body.getReader();
+          const chunks: Uint8Array[] = [];
+          let size = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > 16384) {
+              await reader.cancel();
+              return json({ error: "Request is too large." }, 413);
+            }
+            chunks.push(value);
+          }
+          const data = new Uint8Array(size);
+          let offset = 0;
+          for (const chunk of chunks) {
+            data.set(chunk, offset);
+            offset += chunk.length;
+          }
+          authRequest = new Request(request, { body: data });
+        }
+        const response = await auth.handler(authRequest);
+        response.headers.set("Cache-Control", "no-store");
+        return response;
+      }
+      if (
+        url.pathname !== "/api/tasks" &&
+        url.pathname !== "/api/tasks/claim" &&
+        !/^\/api\/tasks\/[a-f0-9-]{36}$/.test(url.pathname)
+      )
+        return json({ error: "Not found." }, 404);
+      const session = await auth.api.getSession({ headers: request.headers });
+      if (!session) return json({ error: "Sign in to access your tasks." }, 401);
+      const owner = `user:${session.user.id}`;
+      if (url.pathname === "/api/tasks/claim") {
+        if (request.method !== "POST")
+          return json({ error: "Method not allowed." }, 405);
+        const token = request.headers
+          .get("Authorization")
+          ?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
+        if (!token) return json({ error: "Invalid legacy workspace key." }, 400);
+        const digest = await crypto.subtle.digest(
+          "SHA-256", new TextEncoder().encode(token),
+        );
+        const hash = Array.from(new Uint8Array(digest), (byte) =>
+          byte.toString(16).padStart(2, "0"),
+        ).join("");
+        // D1 batch is atomic: a legacy key can only ever belong to one account.
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO workspace_claims (owner_hash, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING").bind(hash, session.user.id),
+          env.DB.prepare("UPDATE tasks SET owner = ? WHERE owner = ? AND EXISTS (SELECT 1 FROM workspace_claims WHERE owner_hash = ? AND user_id = ?)").bind(owner, hash, hash, session.user.id),
+        ]);
+        const claim = await env.DB.prepare("SELECT user_id FROM workspace_claims WHERE owner_hash = ?").bind(hash).first<{user_id: string}>();
+        return claim?.user_id === session.user.id
+          ? json({ imported: true })
+          : json({ error: "These browser tasks were already claimed by another account." }, 409);
+      }
+      const id = url.pathname.split("/")[3];
       if (request.method === "GET" && !id) {
         const rows = await env.DB.prepare(
           `SELECT ${columns} FROM tasks WHERE owner = ? ORDER BY created_at DESC, id DESC`,
@@ -186,6 +242,7 @@ export default {
       "GET, POST, PATCH, DELETE, OPTIONS",
     );
     headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    headers.set("Access-Control-Allow-Credentials", "true");
     headers.set("Vary", "Origin");
     return new Response(response.body, { status: response.status, headers });
   },
