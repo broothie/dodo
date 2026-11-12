@@ -16,6 +16,7 @@
     "db:migrate": "npm run db:migrate -w @dodo/api",
     "deploy": "npm run build && npm run deploy -w @dodo/api",
     "deploy:ci": "npm run db:migrate:remote -w @dodo/api && npm run deploy -w @dodo/api",
+    "deploy:preview": "node scripts/deploy-preview.mjs",
     "preview": "npm run build && npm run db:migrate && npm run dev -w @dodo/api"
   },
   "devDependencies": {
