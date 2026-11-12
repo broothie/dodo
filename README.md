@@ -107,7 +107,7 @@ The `Dodo production builds` token is restricted to Workers Scripts edit, D1 edi
 
 ### Pull request previews
 
-Cloudflare builds branches outside `main` with the same checks and posts a Preview URL on their pull requests. Each branch gets a stable Preview URL and its own D1 database, created and migrated by `npm run deploy:preview`. Further pushes reuse that branch's database and update its Preview. Preview deployment refuses `main` and production database IDs. Cloudflare's native Previews deploy under the existing `dodo` Worker; they do not replace its production deployment.
+Cloudflare builds branches outside `main` with the same checks and reports deployment status on their pull requests. Open the Cloudflare check's build details to find the live Preview URL; the native PR comment currently links build logs rather than the live app. Each branch gets a stable Preview URL and its own D1 database, created and migrated by `npm run deploy:preview`. Further pushes reuse that branch's database and update its Preview. Preview deployment refuses `main` and production database IDs. Cloudflare's native Previews deploy under the existing `dodo` Worker; they do not replace its production deployment.
 
 `scripts/deploy-preview.mjs` generates an ignored configuration with the branch database in both its migration and Preview bindings. Names include a hash of the original branch name to distinguish branches whose URL slugs match. The checked-in `previews` block intentionally has no default database, so a bare `wrangler preview` cannot fall back to production D1. Run the script after `npm run build:ci`; Workers Builds provides the branch as `WORKERS_CI_BRANCH`, with the local Git branch used outside CI.
 
