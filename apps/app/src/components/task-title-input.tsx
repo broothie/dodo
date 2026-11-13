@@ -1,18 +1,25 @@
-import { useRef, type ComponentRef } from "react";
+import { useRef, type ComponentRef, type RefObject } from "react";
+import { Platform } from "react-native";
 import { Input, Text, XStack, YStack, type InputProps } from "tamagui";
 import type { TextRange } from "@dodo/shared/natural-language";
 import { useTitleScroll } from "./title-scroll";
 
-type Props = InputProps & { highlights?: TextRange[]; completed?: boolean };
+type Props = InputProps & {
+  highlights?: TextRange[];
+  completed?: boolean;
+  inputRef?: RefObject<ComponentRef<typeof Input> | null>;
+};
 
 export function TaskTitleInput({
   highlights = [],
   completed,
+  inputRef,
   flex,
   minW,
   ...props
 }: Props) {
-  const ref = useRef<ComponentRef<typeof Input>>(null);
+  const localRef = useRef<ComponentRef<typeof Input>>(null);
+  const ref = inputRef ?? localRef;
   const scroll = useTitleScroll();
   const value = String(props.value ?? "");
   const decorated = highlights.length > 0;
@@ -24,6 +31,7 @@ export function TaskTitleInput({
       <Text
         key={range.start}
         textDecorationLine={completed ? "underline line-through" : "underline"}
+        textDecorationColor="brand-500"
       >
         {value.slice(range.start, range.end)}
       </Text>,
@@ -46,9 +54,7 @@ export function TaskTitleInput({
         px={0}
         rounded="0 hover:0 focus:0 focus-visible:0"
         borderWidth={0}
-        borderBottomWidth={1}
         borderColor="transparent hover:transparent focus:transparent focus-visible:transparent"
-        borderBottomColor="transparent focus:border-color-focus focus-visible:border-color-focus"
         outlineWidth="0 focus:0 focus-visible:0"
         outlineStyle="none focus:none focus-visible:none"
         boxShadow="none focus:none focus-visible:none"
@@ -58,7 +64,7 @@ export function TaskTitleInput({
           { textDecorationLine: completed ? "line-through" : "none" },
         ]}
         onSubmitEditing={
-          props.onSubmitEditing
+          Platform.OS !== "web" && props.onSubmitEditing
             ? (event) => {
                 props.onSubmitEditing?.(event);
                 if (props.blurOnSubmit !== false) ref.current?.blur();
@@ -67,6 +73,14 @@ export function TaskTitleInput({
         }
         onKeyDown={(event) => {
           props.onKeyDown?.(event);
+          if (Platform.OS === "web" && event.key === "Enter" && props.onSubmitEditing && !event.defaultPrevented) {
+            // Enter can confirm an IME candidate without submitting the task.
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+            event.preventDefault();
+            if (event.repeat || props.readOnly || props.disabled) return;
+            props.onSubmitEditing({ nativeEvent: { text: event.currentTarget.value } });
+            if (props.blurOnSubmit !== false) ref.current?.blur();
+          }
           if (event.key === "Escape") ref.current?.blur();
         }}
       />

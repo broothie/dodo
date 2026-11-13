@@ -13,6 +13,8 @@ import {
   Checkbox,
   H2,
   H3,
+  H4,
+  Input,
   Paragraph,
   Spinner,
   XStack,
@@ -23,8 +25,8 @@ import {
 import Check from "lucide-react-native/icons/check";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
 import Trash2 from "lucide-react-native/icons/trash-2";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { FlatList } from "react-native";
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
+import { SectionList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Head from "expo-router/head";
 import {
@@ -36,6 +38,7 @@ import {
 } from "@dodo/shared";
 import { api } from "../lib/api";
 import { parseTaskText } from "@dodo/shared/natural-language";
+import { groupTasksByDate } from "../lib/task-sections";
 
 function CompletionIcon() {
   const theme = useTheme();
@@ -45,6 +48,9 @@ function CompletionIcon() {
 export default function Tasks() {
   const mutationQueue = useRef(Promise.resolve());
   const savingTitles = useRef(new Set<string>());
+  const newTaskInput = useRef<ComponentRef<typeof Input>>(null);
+  const creatingTask = useRef(false);
+  const newTaskFocused = useRef(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
   const [adding, setAdding] = useState(false);
@@ -185,21 +191,25 @@ export default function Tasks() {
     }, true);
   }
   async function addTask() {
-    if (busy || loading || offline || !title.trim()) return;
+    if (creatingTask.current || busy || loading || offline || !title.trim()) return;
     if (newParsed.error || !newParsed.title) {
       setError(newParsed.error || "Add a task title as well as a deadline.");
       return;
     }
     const draft = newParsed;
-    await mutate(async () => {
-      const saved = await api.create({ title: draft.title, ...draft.due });
-      setTasks((list) => [saved, ...list]);
-      setTitle("");
-      setNewDue(noDue);
-      setNewReference(new Date());
-      setAdding(false);
-      setDueEditor(null);
-    });
+    creatingTask.current = true;
+    try {
+      await mutate(async () => {
+        const saved = await api.create({ title: draft.title, ...draft.due });
+        setTasks((list) => [saved, ...list]);
+        setTitle("");
+        setNewDue(noDue);
+        setNewReference(new Date());
+        setAdding(newTaskFocused.current);
+        setDueEditor(null);
+        if (newTaskFocused.current) newTaskInput.current?.focus();
+      });
+    } finally { creatingTask.current = false; }
   }
   function beginEditing(task: Task) {
     setError("");
@@ -215,9 +225,7 @@ export default function Tasks() {
     setDueEditor(null);
     setDeleting(null);
   }
-  const visible = [...tasks].sort(
-    (a, b) => Number(a.completedAt !== null) - Number(b.completedAt !== null),
-  );
+  const sections = groupTasksByDate(tasks);
   return (
     <OutsideEditProvider>
       <YStack flex={1} bg="background">
@@ -232,7 +240,12 @@ export default function Tasks() {
                 <Button size="sm" circular variant="outlined" borderWidth={0} icon={EllipsisVertical} aria-label="Settings" />
               </Link>
             </XStack>
-            <H3>Tasks ({tasks.length})</H3>
+            <XStack items="center" gap="2">
+              <H3>Tasks</H3>
+              <Paragraph bg="color-2" rounded="full" px="2" py="1" minW={28} text="center" fontSize="sm" lineHeight="sm">
+                {tasks.length}
+              </Paragraph>
+            </XStack>
             {!!visibleError && (
               <YStack
                 theme="red"
@@ -262,14 +275,17 @@ export default function Tasks() {
                 <XStack items="center" gap="3" pt="1" pb="0">
                   <Checkbox disabled aria-hidden={true} />
                   <TaskTitleInput
+                    inputRef={newTaskInput}
                     aria-label="New task"
                     placeholder="New task"
                     readOnly={busy}
                     highlights={newParsed.matches}
                     onFocus={() => {
+                      newTaskFocused.current = true;
                       if (!adding && !title) setNewReference(new Date());
                       setAdding(true);
                     }}
+                    onBlur={() => { newTaskFocused.current = false; }}
                     maxLength={300}
                     value={title}
                     onChangeText={(text) => {
@@ -278,7 +294,9 @@ export default function Tasks() {
                       setAdding(true);
                     }}
                     onSubmitEditing={() => void addTask()}
-                    returnKeyType="done"
+                    enterKeyHint="enter"
+                    returnKeyType="default"
+                    submitBehavior="submit"
                     blurOnSubmit={false}
                     flex={1}
                     minW={0}
@@ -306,8 +324,15 @@ export default function Tasks() {
             {loading ? (
               <Spinner aria-label="Loading tasks" />
             ) : (
-              <FlatList
-                data={visible}
+              <SectionList
+                sections={sections}
+                stickySectionHeadersEnabled={false}
+                keyboardShouldPersistTaps="handled"
+                renderSectionHeader={({ section }) => (
+                  <YStack pt="3" pb="1">
+                    <H4 fontSize="sm" lineHeight="sm">{section.title}</H4>
+                  </YStack>
+                )}
                 keyExtractor={(task) => task.id}
                 ListEmptyComponent={
                   <YStack py="6">
