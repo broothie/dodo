@@ -125,6 +125,13 @@ Cleanup requires the repository secret `CLOUDFLARE_PREVIEW_CLEANUP_TOKEN`, with 
 
 The screens already use React Native primitives. Configure `EXPO_PUBLIC_API_URL` with your HTTPS Worker URL, choose iOS/Android application identifiers in app.json, and use Expo development builds. Test on actual native devices before releasing. Platform-specific auth clients, legacy workspace storage, and PWA registration are isolated in `.web.ts` adapters. Native builds have not yet been verified.
 
+## TODO
+
+- [ ] Remove delete confirmation step.
+- [ ] Set up notifications.
+- [ ] Set up platform syncing.
+- [ ] Add animations.
+
 ## Task completion
 
 A task is complete when `completedAt` is non-null. The API accepts a timezone-qualified ISO timestamp or `null` to reopen it, and returns timestamps normalized to UTC. The checkbox sends the current time when checked. Title-only updates preserve the completion timestamp.
@@ -135,7 +142,7 @@ Migration `0003_task_completed_at.sql` preserves existing completion status, usi
 
 `dueKind` distinguishes `none`, `date`, and `datetime`. `dueAt` is null, a calendar date (`YYYY-MM-DD`), or a UTC ISO timestamp, respectively. Date-only deadlines are never converted to UTC or another timezone, so an all-day deadline cannot be confused with an actual midnight deadline. Timed deadlines also store an IANA `timeZone` for interpreting local selections. Display and editing use the device timezone.
 
-Set or clear the due fields together in an API request; partial changes to `dueAt` alone are rejected. Ordinary title/completion patches preserve the deadline. Task titles always use the same inline input, with a subtle underline on focus and no change in position or padding. Titles save on Enter or when clicking/focusing outside the task. Escape discards the title draft. Date and delete chips appear below the title. Saved deadlines are clickable date chips that open the date modal. New tasks expose their date chip only while editing the draft; clicking outside hides it without losing the draft.
+Set or clear the due fields together in an API request; partial changes to `dueAt` alone are rejected. Ordinary title/completion patches preserve the deadline. Task titles always use the same borderless inline input. Clicking or focusing outside a task saves its title. Enter saves the existing task and opens a focused new row immediately below it, inheriting its deadline (or none); submitting that row continues entry below the newly created task. A failed save leaves the current edit open. Escape discards an existing task's title draft. The floating create button opens a new-task row at the top; clicking outside or pressing Escape hides it while preserving the draft. Tasks are grouped by date, with time-only chips; the chip component's `showDate` prop restores full date labels. Date and delete controls appear while editing.
 
 The date modal uses `react-native-calendars` for a calendar on web and native. An unset date starts on today. Time stays optional: tapping Add time fills the current time in the device timezone, and removing it restores a date-only deadline. Timed deadlines open in the device timezone; there is no timezone entry field. Web uses MUI TimeClock with hour/minute selection and AM/PM controls; native uses the system time picker through `@expo/ui`. Save applies the draft, Clear removes the deadline, and Cancel or clicking outside discards changes. Nonexistent spring-forward times are rejected; duplicated fall-back times use the earlier instant.
 
@@ -145,6 +152,6 @@ Recurrence is not implemented.
 
 New tasks and edited task titles recognize English dates and times locally with Chrono. Recognized phrases are underlined, preview the deadline chip as you type, and are extracted from the saved title on Enter or an existing task's outside-click save. An input containing only a deadline needs a task title before it can be saved. Removing all phrases restores the previously selected deadline; Escape discards an existing task's draft.
 
-Supported examples include `wed`, `nov 1`, `tomorrow`, `today`, `tm`/`tmr`/`tmrw`, `next week`, `1:00`, `02:00`, `13:00`, `1p`, `1pm`, and `1 o'clock`. Dates without a year move forward to their next occurrence. A bare weekday includes today, and next week means next Monday. The rightmost date and rightmost time win independently, so `today 1pm tomorrow 2pm` resolves to tomorrow at 2pm. All recognized phrases are extracted, including superseded ones.
+Supported examples include `wed`, `nov 1`, `tomorrow`, `today`, `tm`/`tmr`/`tmrw`, `next week`, `1:00`, `02:00`, `13:00`, `1p`, `1pm`, and `1 o'clock`. Dates without a year move forward to their next occurrence. A bare weekday includes today, and next week means next Monday. The rightmost date and rightmost time win independently, so `today 1pm tomorrow 2pm` resolves to tomorrow at 2pm. Only the winning, underlined expressions are extracted; earlier dates and times remain literal in the saved title and during unrelated edits.
 
 Time-only phrases use the next occurrence when no date is already selected. An hour without AM/PM or a leading zero can be AM or PM; the next matching time wins (`1 o'clock` at 10am becomes 1pm). Leading-zero and 24-hour forms are explicit (`02:00` is 2am). With a selected date, the date is preserved; a future date's ambiguous hour uses its first matching time. Changing just the date preserves an existing time, and changing just the time preserves an existing date. All conversion uses the device timezone and the same DST validation as the date modal. Choosing a date manually in the modal extracts the recognized phrases and uses the manually selected deadline.

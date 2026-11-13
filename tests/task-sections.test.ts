@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { groupTasksByDate } from "../apps/app/src/lib/task-sections.ts";
+import { groupTasksByDate, insertTaskAfter } from "../apps/app/src/lib/task-sections.ts";
 import { noDue, type Due } from "../packages/shared/src/scheduling.ts";
 
 function task(id: string, due: Due = noDue, completedAt: string | null = null) {
@@ -64,4 +64,19 @@ test("completed tasks sort by completion and reopen into their date section", ()
   assert.deepEqual(groupTasksByDate([older, recent], now)[0].data.map(task => task.id), ["recent", "older"]);
   const reopened = groupTasksByDate([older, { ...recent, completedAt: null }], now);
   assert.deepEqual(reopened.map(section => section.title), ["Today", "Completed"]);
+});
+
+test("inline insertion stays below its anchor within matching deadlines and undated tasks", () => {
+  for (const due of [noDue, date("2026-11-13"), time("2026-11-13T21:00:00Z")]) {
+    const first = task("first", due);
+    const last = task("last", due);
+    const inserted = { ...task("inserted", due), createdAt: "2026-11-13T20:00:00Z" };
+    const original = [first, last];
+    const list = insertTaskAfter(original, inserted, first.id);
+    assert.deepEqual(list.map(item => item.id), ["first", "inserted", "last"]);
+    assert.deepEqual(groupTasksByDate(list)[0].data.map(item => item.id), ["first", "inserted", "last"]);
+    assert.deepEqual(original.map(item => item.id), ["first", "last"]);
+    assert.equal(insertTaskAfter(original, inserted, null)[0].id, "inserted");
+    assert.equal(insertTaskAfter(original, inserted, "missing")[0].id, "inserted");
+  }
 });
