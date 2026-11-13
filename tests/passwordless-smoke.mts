@@ -31,26 +31,9 @@ async function code(email: string, ip = nextIp()) {
   assert.ok(!(await response.text()).includes(otp), "Code must not be returned by the API");
   return otp;
 }
-async function link(email: string) {
-  const response = await auth("sign-in/magic-link", { email });
-  assert.equal(response.status, 200, await response.clone().text());
-  const message = await mail(email);
-  const url = new URL(message.text.match(/http[^\s]+/)![0]);
-  const token = url.searchParams.get("token")!;
-  assert.ok(token);
-  assert.equal(url.pathname, "/auth/verify");
-  assert.equal(url.searchParams.get("email"), email);
-  assert.ok(!(await response.text()).includes(token));
-  return { url, token };
-}
-async function verify(token: string, ip = nextIp(), extra: Record<string, string> = {}) {
-  return fetch(`${base}/api/auth/magic-link/verify?token=${encodeURIComponent(token)}`, {
-    redirect: "manual", headers: { Origin: base, "X-Dodo-Magic-Link": "1", "CF-Connecting-IP": ip, ...extra },
-  });
-}
 const existingEmail = `passwordless-existing-${suffix}@example.test`;
-const password = crypto.randomUUID();
-const created = await auth("sign-up/email", { name: "Passwordless smoke", email: existingEmail, password });
+const initialCode = await code(existingEmail);
+const created = await auth("sign-in/email-otp", { email: existingEmail, otp: initialCode });
 assert.equal(created.status, 200);
 const originalCookie = cookie(created);
 const originalUser = (await created.json()).user;
@@ -62,6 +45,12 @@ for (const file of readdirSync(folder).filter((file) => file.endsWith(".sqlite")
   candidate.close();
 }
 assert.ok(db);
+// Simulate an account from before passwordless-only auth, without reopening
+// password registration or changing any real account.
+db.prepare('UPDATE user SET emailVerified=0 WHERE id=?').run(originalUser.id);
+const now = new Date().toISOString();
+db.prepare('INSERT INTO account (id, accountId, providerId, userId, password, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+  .run(crypto.randomUUID(), originalUser.id, "credential", originalUser.id, "disabled-legacy-password-fixture", now, now);
 const testEmails = [existingEmail];
 const address = (label: string) => { const email = `${label}-${suffix}@example.test`; testEmails.push(email); return email; };
 let taskId: string | undefined;
@@ -108,32 +97,17 @@ try {
   const race = await Promise.all([auth("sign-in/email-otp",{email:raceEmail,otp:raceCode}),auth("sign-in/email-otp",{email:raceEmail,otp:raceCode})]);
   assert.equal(race.filter((response)=>response.status===200).length,1);
 
-  const magicEmail = address("magic"), magic = await link(magicEmail);
-  const magicRecord = db.prepare('SELECT identifier FROM verification WHERE value LIKE ?').get(`%${magicEmail}%`);
-  assert.ok(magicRecord && !String(magicRecord.identifier).includes(magic.token), "Link tokens should be hashed in D1");
-  // Following the emailed page and the raw endpoint cannot consume the token.
-  assert.equal((await fetch(magic.url)).status,200);
-  assert.equal((await fetch(`${base}/api/auth/magic-link/verify?token=${magic.token}`)).status,400);
-  assert.equal((await verify(magic.token,nextIp(),{Origin:"https://evil.example"})).status,403);
-  const linked = await verify(magic.token);
-  assert.equal(linked.status,200,await linked.clone().text());
-  assert.equal((await linked.json()).user.email,magicEmail);
-  assert.ok(cookie(linked));
-  assert.equal((await verify(magic.token)).status,400);
-
-  const expiredMagicEmail = address("expired-magic"), expiredMagic = await link(expiredMagicEmail);
-  db.prepare("UPDATE verification SET expiresAt=1 WHERE value LIKE ?").run(`%${expiredMagicEmail}%`);
-  assert.equal((await verify(expiredMagic.token)).status,400);
-
-  const raceMagicEmail = address("race-magic"), raceMagic = await link(raceMagicEmail);
-  const magicRace = await Promise.all([verify(raceMagic.token),verify(raceMagic.token)]);
-  assert.deepEqual(magicRace.map((response)=>response.status).sort(),[200,400]);
+  const removedLinkEmail = address("removed-link");
+  assert.equal((await auth("sign-in/magic-link", {email:removedLinkEmail})).status,404);
+  assert.equal((await auth("magic-link/verify?token=disabled-token")).status,404);
+  const captured = await (await fetch(`${base}/__dev/mail`)).json();
+  assert.equal(captured.some((message: {to: string}) => message.to === removedLinkEmail),false,"Disabled magic links must not send email");
 
   const rateIp = nextIp();
   for (let i=0;i<3;i++) assert.equal((await auth("email-otp/send-verification-otp",{email:address(`rate-${i}`),type:"sign-in"},rateIp)).status,200);
   assert.equal((await auth("email-otp/send-verification-otp",{email:address("rate-blocked"),type:"sign-in"},rateIp)).status,429);
   assert.equal((await fetch(`${base}/__dev/mail`,{headers:{Origin:"https://evil.example"}})).status,403);
-  console.log("Passwordless smoke passed: new/existing accounts, ownership, hashed codes, expiry, resend rotation, attempt limits, atomic single use, scanner protection, CSRF, and rate limits.");
+  console.log("Email-code smoke passed: new/existing accounts, ownership, hashed codes, expiry, resend rotation, attempt limits, atomic single use, disabled magic links, and rate limits.");
 } finally {
   if (taskId) db.prepare('DELETE FROM tasks WHERE id=?').run(taskId);
   for (const email of testEmails) {

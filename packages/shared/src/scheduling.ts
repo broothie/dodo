@@ -106,19 +106,47 @@ export function localParts(due: Due) {
     timeZone: due.timeZone,
   };
 }
-export function formatDue(due: Due): string {
+function formatTime(date: Date): string {
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const minutePart = minutes ? `:${String(minutes).padStart(2, "0")}` : "";
+  return `${hours % 12 || 12}${minutePart}${hours < 12 ? "am" : "pm"}`;
+}
+
+export function formatDue(due: Due, now = new Date()): string {
   if (due.dueKind === "none") return "";
-  if (due.dueKind === "date")
-    return Temporal.PlainDate.from(due.dueAt).toLocaleString(undefined, {
-      year: "numeric",
+  const calendarDay = (date: Date) =>
+    Temporal.PlainDate.from({
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+    });
+  const today = calendarDay(now);
+  const instant = due.dueKind === "datetime" ? new Date(due.dueAt) : null;
+  const day = instant ? calendarDay(instant) : Temporal.PlainDate.from(due.dueAt);
+  const relative = day.equals(today)
+    ? "Today"
+    : day.equals(today.subtract({ days: 1 }))
+      ? "Yesterday"
+      : day.equals(today.add({ days: 1 }))
+        ? "Tomorrow"
+        : null;
+  const time = instant ? formatTime(instant) : "";
+  if (relative) {
+    if (!instant) return relative;
+    return relative === "Today" ? time : `${relative}, ${time}`;
+  }
+  const year = day.year === today.year ? undefined : "numeric";
+  if (!instant)
+    return day.toLocaleString(undefined, {
+      year,
       month: "short",
       day: "numeric",
     });
-  return new Intl.DateTimeFormat(undefined, {
-    year: "numeric",
+  const date = new Intl.DateTimeFormat(undefined, {
+    year,
     month: "short",
     day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(due.dueAt));
+  }).format(instant);
+  return `${date}, ${time}`;
 }

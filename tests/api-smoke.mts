@@ -3,17 +3,23 @@ import { DatabaseSync } from "node:sqlite";
 import { readdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 const base = process.env.API_URL ?? "http://localhost:8787";
-const password = crypto.randomUUID() + "!";
+assert.ok(["localhost", "127.0.0.1"].includes(new URL(base).hostname), "This test uses local email capture, not real delivery.");
 const suffix = crypto.randomUUID();
+let ipCounter = 1;
+const ipNonce = crypto.randomUUID().slice(0, 4);
 async function authRequest(path: string, body: unknown, cookie = "") {
   return fetch(`${base}/api/auth/${path}`, {
-    method: "POST", headers: { "Content-Type": "application/json", Origin: base, Cookie: cookie },
+    method: "POST", headers: { "Content-Type": "application/json", Origin: base, Cookie: cookie, "CF-Connecting-IP": `2001:db8:${ipNonce}:${ipCounter++}::1` },
     body: JSON.stringify(body),
   });
 }
-async function signUp(label: string) {
-  const email = `${label}-${suffix}@example.test`;
-  const response = await authRequest("sign-up/email", { name: label, email, password });
+async function signIn(email: string) {
+  const sent = await authRequest("email-otp/send-verification-otp", { email, type: "sign-in" });
+  assert.equal(sent.status, 200, await sent.clone().text());
+  const messages = await (await fetch(`${base}/__dev/mail`)).json();
+  const otp = messages.filter((message: { to: string }) => message.to === email).at(-1)?.text.match(/\b\d{6}\b/)?.[0];
+  assert.ok(otp, "Expected an email code in local capture");
+  const response = await authRequest("sign-in/email-otp", { email, otp });
   assert.equal(response.status, 200, await response.clone().text());
   const cookie = response.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
   assert.ok(cookie);
@@ -21,8 +27,8 @@ async function signUp(label: string) {
   assert.match(response.headers.get("set-cookie")!, /SameSite=Lax/i);
   return { email, cookie, id: (await response.json()).user.id };
 }
-const account = await signUp("smoke-owner");
-const other = await signUp("smoke-stranger");
+const account = await signIn(`smoke-owner-${suffix}@example.test`);
+const other = await signIn(`smoke-stranger-${suffix}@example.test`);
 const owner = account.cookie, stranger = other.cookie;
 async function request(path = "", method = "GET", body?: unknown, key = owner) {
   return fetch(`${base}/api/tasks${path}`, {
@@ -169,11 +175,15 @@ const untrusted = await fetch(`${base}/api/tasks`, {
 assert.equal(untrusted.headers.get("Access-Control-Allow-Origin"), null);
 console.log("Development CORS allowlist passed.");
 
-const invalid = await authRequest("sign-in/email", { email: account.email, password: "incorrect-password" });
-assert.equal(invalid.status, 401);
-const signedIn = await authRequest("sign-in/email", { email: account.email, password });
-assert.equal(signedIn.status, 200);
-const secondCookie = signedIn.headers.getSetCookie().map(value => value.split(";")[0]).join("; ");
+for (const path of ["sign-in/email", "sign-up/email", "set-password", "change-password", "verify-password", "request-password-reset", "reset-password", "email-otp/request-password-reset", "forget-password/email-otp", "email-otp/reset-password"]) {
+  const disabled = await authRequest(path, { email: account.email, name: "Ignored", password: "disabled-password-fixture", newPassword: "disabled-password-fixture" }, owner);
+  assert.equal(disabled.status, 404, `${path} must be disabled`);
+}
+const capturedForOwner = async () => (await (await fetch(`${base}/__dev/mail`)).json()).filter((message: { to: string }) => message.to === account.email).length;
+const beforePasswordReset = await capturedForOwner();
+assert.equal((await authRequest("email-otp/send-verification-otp", { email: account.email, type: "forget-password" })).status, 200);
+assert.equal(await capturedForOwner(), beforePasswordReset, "Password-reset requests must not send email");
+const secondCookie = (await signIn(account.email)).cookie;
 assert.deepEqual(await (await request("", "GET", undefined, secondCookie)).json(), []);
 const forbidden = await fetch(`${base}/api/tasks`, {method:"POST", headers: {Cookie:owner, Origin:"https://evil.example", "Content-Type":"application/json"},body:JSON.stringify({title:"CSRF"})});
 assert.equal(forbidden.status,403);
@@ -194,8 +204,7 @@ if (["localhost", "127.0.0.1"].includes(new URL(base).hostname)) {
   }
   assert.ok(db, "Could not locate the local session database");
   const credential = db.prepare("SELECT password FROM account JOIN user ON user.id = account.userId WHERE user.email = ?").get(account.email);
-  assert.equal(typeof credential?.password, "string");
-  assert.notEqual(credential?.password, password);
+  assert.equal(credential, undefined, "Passwordless registration must not create a password credential");
   assert.ok(Number(db.prepare('SELECT count(*) AS count FROM rateLimit').get()?.count) > 0);
   const legacyToken = (crypto.randomUUID() + crypto.randomUUID()).replaceAll("-", "");
   const hash = createHash("sha256").update(legacyToken).digest("hex");

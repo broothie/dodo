@@ -1,12 +1,18 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { expo } from "@better-auth/expo";
-import { emailOTP, magicLink } from "better-auth/plugins";
+import { emailOTP } from "better-auth/plugins";
 import { authEmail, sendAuthEmail } from "./auth-email";
 
-// Schema options used to generate 0005_accounts.sql with Better Auth 1.7.22.
+// Keep Better Auth's existing schema; only email codes can sign in.
 export const authOptions = {
   appName: "Dodo",
-  emailAndPassword: { enabled: true },
+  emailAndPassword: { enabled: false },
+  disabledPaths: [
+    "/sign-up/email", "/sign-in/email", "/request-password-reset", "/reset-password",
+    "/change-password", "/set-password", "/verify-password",
+    "/email-otp/request-password-reset", "/forget-password/email-otp", "/email-otp/reset-password",
+    "/sign-in/magic-link", "/magic-link/verify",
+  ],
   plugins: [expo()],
   session: { cookieCache: { enabled: false } },
   rateLimit: { enabled: true, storage: "database", window: 60, max: 100 },
@@ -46,19 +52,9 @@ export function createAuth(env: Env) {
         storeOTP: "hashed",
         rateLimit: { window: 60, max: 3 },
         async sendVerificationOTP({ email, otp, type }) {
-          const purpose = type === "sign-in" ? "sign in to Dodo" : type === "forget-password" ? "reset your Dodo password" : "verify your Dodo email";
+          if (type === "forget-password") return;
+          const purpose = type === "sign-in" ? "sign in to Dodo" : "verify your Dodo email";
           await sendAuthEmail(env, authEmail(email, "Your Dodo code", `Your code to ${purpose} is:\n\n${otp}\n\nThis code expires in 5 minutes. If you didn’t request it, ignore this email.`));
-        },
-      }),
-      magicLink({
-        expiresIn: 300,
-        storeToken: "hashed",
-        rateLimit: { window: 60, max: 3 },
-        async sendMagicLink({ email, token }) {
-          const link = new URL("/auth/verify", env.BETTER_AUTH_URL);
-          link.searchParams.set("token", token);
-          link.searchParams.set("email", email);
-          await sendAuthEmail(env, authEmail(email, "Sign in to Dodo", `Open this link to sign in as ${email}:\n\n${link}\n\nConfirm sign-in on the page that opens. This link expires in 5 minutes and can be used once. If you didn’t request it, ignore this email.`));
         },
       }),
     ],

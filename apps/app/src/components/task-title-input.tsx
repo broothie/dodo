@@ -37,6 +37,8 @@ export function TaskTitleInput({
         {...props}
         {...scroll.inputProps}
         ref={ref}
+        fontSize="lg"
+        lineHeight="lg"
         bg="white"
         color={decorated ? "transparent" : "color"}
         caretColor="color"
@@ -82,8 +84,8 @@ export function TaskTitleInput({
           <XStack position="absolute" t={8} l={0} x={-scroll.offset}>
             <Text
               fontFamily="body"
-              fontSize="sm"
-              lineHeight="sm"
+              fontSize="lg"
+              lineHeight="lg"
               whiteSpace="pre"
               numberOfLines={1}
               color="color"

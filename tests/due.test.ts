@@ -70,3 +70,40 @@ test("local time conversion rejects DST gaps and consistently chooses earlier ov
   assert.throws(() => dueFromLocal("", "12:00", "UTC"));
   assert.throws(() => dueFromLocal("2026-12-14", "24:00", "UTC"));
 });
+
+test("deadline chips use relative days, time-only today, and years only outside the current year", () => {
+  const now = new Date(2026, 10, 12, 12);
+  assert.equal(formatDue(noDue, now), "");
+  assert.equal(formatDue(parseDue({ dueKind: "date", dueAt: "2026-11-12" }), now), "Today");
+  assert.equal(formatDue(parseDue({ dueKind: "date", dueAt: "2026-11-11" }), now), "Yesterday");
+  assert.doesNotMatch(formatDue(parseDue({ dueKind: "date", dueAt: "2026-11-14" }), now), /2026/);
+  assert.match(formatDue(parseDue({ dueKind: "date", dueAt: "2027-11-14" }), now), /2027/);
+  const timed = (date: Date) => parseDue({ dueKind: "datetime", dueAt: date.toISOString(), timeZone: "UTC" });
+  const today = new Date(2026, 10, 12, 13);
+  assert.equal(formatDue(timed(today), now), "1pm");
+  assert.equal(formatDue(timed(new Date(2026, 10, 12, 13, 30)), now), "1:30pm");
+  assert.equal(formatDue(timed(new Date(2026, 10, 12, 0)), now), "12am");
+  assert.equal(formatDue(timed(new Date(2026, 10, 12, 12)), now), "12pm");
+  assert.equal(formatDue(timed(new Date(2026, 10, 11, 13)), now), "Yesterday, 1pm");
+  assert.equal(formatDue(parseDue({ dueKind: "date", dueAt: "2026-11-13" }), now), "Tomorrow");
+  assert.equal(formatDue(timed(new Date(2026, 10, 13, 13)), now), "Tomorrow, 1pm");
+  assert.doesNotMatch(formatDue(timed(new Date(2026, 10, 14, 13)), now), /2026/);
+  assert.match(formatDue(timed(new Date(2027, 10, 14, 13)), now), /2027/);
+});
+
+test("relative deadlines follow the display timezone and calendar days across DST and year boundaries", () => {
+  const oldZone = process.env.TZ;
+  try {
+    process.env.TZ = "America/Los_Angeles";
+    const timed = (dueAt: string) => parseDue({ dueKind: "datetime", dueAt, timeZone: "Asia/Tokyo" });
+    assert.equal(formatDue(timed("2026-11-13T03:00:00Z"), new Date("2026-11-13T04:00:00Z")), "7pm");
+    assert.equal(formatDue(timed("2026-11-01T07:30:00Z"), new Date("2026-11-02T08:30:00Z")), "Yesterday, 12:30am");
+    assert.doesNotMatch(formatDue(timed("2027-01-01T01:00:00Z"), new Date("2026-12-01T20:00:00Z")), /2026|2027/);
+    assert.equal(formatDue(parseDue({ dueKind: "date", dueAt: "2025-12-31" }), new Date(2026, 0, 1)), "Yesterday");
+    assert.equal(formatDue(timed("2026-03-09T07:30:00Z"), new Date("2026-03-08T08:30:00Z")), "Tomorrow, 12:30am");
+    assert.equal(formatDue(parseDue({ dueKind: "date", dueAt: "2027-01-01" }), new Date(2026, 11, 31)), "Tomorrow");
+  } finally {
+    if (oldZone === undefined) delete process.env.TZ;
+    else process.env.TZ = oldZone;
+  }
+});

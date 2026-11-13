@@ -1,5 +1,6 @@
 import LogOut from "lucide-react-native/icons/log-out";
 import Calendar from "lucide-react-native/icons/calendar";
+import Clock from "lucide-react-native/icons/clock";
 import { DueDialog } from "../components/due-dialog";
 import { TaskTitleInput } from "../components/task-title-input";
 import {
@@ -223,7 +224,7 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
           <Head>
             <title>Dodo</title>
           </Head>
-          <YStack flex={1} w="100%" maxW={900} self="center" p="4" gap="4">
+          <YStack flex={1} w="100%" maxW={900} self="center" px="6" py="4" gap="4">
             <XStack items="center" justify="space-between" gap="3">
               <H2>Dodo</H2>
               <Button size="sm" icon={LogOut} onPress={onSignOut}>Sign out</Button>
@@ -257,7 +258,7 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
               onOutside={() => setAdding(false)}
             >
               <YStack bg="white">
-                <XStack items="center" gap="3" py="3">
+                <XStack items="center" gap="3" pt="1" pb="0">
                   <Checkbox disabled aria-hidden={true} />
                   <TaskTitleInput
                     aria-label="New task"
@@ -283,12 +284,12 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
                   />
                 </XStack>
                 {adding && (
-                  <XStack pb="3">
+                  <XStack pb="2" pl="9">
                     <Button
-                      size="sm"
+                      size="xs"
                       rounded="full"
                       aria-label="Set new task due date"
-                      icon={Calendar}
+                      icon={newParsed.due.dueKind === "datetime" ? Clock : Calendar}
                       onPress={() =>
                         setDueEditor(dueEditor === "new" ? null : "new")
                       }
@@ -320,7 +321,7 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
                     onOutside={() => void finishEditing(item)}
                   >
                     <YStack bg="white">
-                      <XStack items="center" gap="3" py="3">
+                      <XStack items="center" gap="3" pt="1" pb="0">
                         <Checkbox
                           aria-label={`Complete ${item.title}`}
                           checked={item.completedAt !== null}
@@ -366,13 +367,13 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
                         />
                       </XStack>
                       {editing === item.id && (
-                        <YStack gap="3" pb="3" pl="9">
+                        <YStack gap="2" pb="2" pl="9">
                           <XStack gap="2" flexWrap="wrap">
                             <Button
-                              size="sm"
+                              size="xs"
                               rounded="full"
                               aria-label={`Set due date for ${item.title}`}
-                              icon={Calendar}
+                              icon={editParsed.due.dueKind === "datetime" ? Clock : Calendar}
                               disabled={busy}
                               onPress={() => {
                                 setDueEditor(
@@ -386,7 +387,7 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
                                 : formatDue(editParsed.due)}
                             </Button>
                             <Button
-                              size="sm"
+                              size="xs"
                               rounded="full"
                               aria-label={`Delete ${item.title}`}
                               icon={Trash2}
@@ -404,12 +405,12 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
                         </YStack>
                       )}
                       {editing !== item.id && item.dueKind !== "none" && (
-                        <XStack pb="3" pl="9">
+                        <XStack pb="2" pl="9">
                           <Button
-                            size="sm"
+                            size="xs"
                             rounded="full"
                             aria-label={`Set due date for ${item.title}`}
-                            icon={Calendar}
+                            icon={item.dueKind === "datetime" ? Clock : Calendar}
                             disabled={busy}
                             onPress={() => setDueEditor(item.id)}
                           >

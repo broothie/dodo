@@ -36,12 +36,7 @@ const app = {
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
     try {
       // Custom task routes use cookies too, so enforce origins on mutations.
-      const verifyingLink = url.pathname === "/api/auth/magic-link/verify";
-      // Only our confirmation screen redeems links. Navigation and email
-      // scanners cannot supply this header; cross-origin fetches need CORS.
-      if (verifyingLink && request.headers.get("X-Dodo-Magic-Link") !== "1")
-        return json({ error: "Open the email link and confirm sign-in." }, 400);
-      if (verifyingLink || !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+      if (!["GET", "HEAD", "OPTIONS"].includes(request.method)) {
         const origin = request.headers.get("Origin");
         if (
           (origin && !trustedOrigins(env.BETTER_AUTH_URL, env.BETTER_AUTH_ADDITIONAL_ORIGINS).includes(origin)) ||
@@ -76,11 +71,6 @@ const app = {
           authRequest = new Request(request, { body: data });
         }
         const response = await auth.handler(authRequest);
-        if (verifyingLink && response.status >= 300 && response.status < 400) {
-          const location = response.headers.get("Location");
-          if (location && new URL(location, request.url).searchParams.has("error"))
-            return json({ code: "INVALID_MAGIC_LINK", message: "This link is invalid, expired, or already used. Request a new one." }, 400);
-        }
         response.headers.set("Cache-Control", "no-store");
         return response;
       }
