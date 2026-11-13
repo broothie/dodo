@@ -28,6 +28,7 @@ function fixture(options: { open?: boolean; active?: boolean; reopened?: boolean
     cloudflare: async (path: string, request: { method?: string } = {}) => {
       const method = request.method ?? 'GET';
       calls.push({ path, method });
+      if (method === 'GET' && path === previewPath) return { result: { name: identity.name } };
       if (method === 'GET' && path.includes('/d1/database?')) return { result: options.databases ?? [database] };
       if (method === 'DELETE' && path === previewPath && options.failPreview) throw new Error('Preview API failed');
       if (method === 'DELETE' && [previewPath, databasePath].includes(path)) return null;

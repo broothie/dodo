@@ -117,6 +117,7 @@ export async function cleanupPullRequest(number, { github, cloudflare, source, d
     log(`PR #${number}: preview build is active; cleanup will retry when the build completes.`); return 'deferred';
   }
   const previewPath = `${accountPath}/workers/workers/${worker}/previews/${encodeURIComponent(identity.name)}`;
+  await cloudflare(previewPath, { missing: true });
   // Resolve the exact database by name, then delete by its validated UUID.
   const databases = [];
   for (let page = 1; ; page++) {
