@@ -20,6 +20,6 @@ test('preview deployments cannot select main or production D1, and branch names 
   assert.equal(config.previews.vars.BETTER_AUTH_URL, `https://${identity.name}-dodo.adbooth.workers.dev`);
   assert.equal(config.previews.vars.BETTER_AUTH_ADDITIONAL_ORIGINS, '');
   assert.equal(config.routes, undefined);
-  assert.deepEqual(config.secrets.required, ['BETTER_AUTH_SECRET']);
+  assert.deepEqual(config.secrets.required, ['BETTER_AUTH_SECRET', 'RESEND_API_KEY']);
   assert.equal(JSON.stringify(config).includes(source.d1_databases[0].database_id), false);
 });
