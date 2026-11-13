@@ -39,7 +39,7 @@ export function AuthGate({ children }: { children?: (user: AccountUser) => React
     } finally { setSigningOut(false); }
   }
   if (user && readyFor === user.id && !signingOut && !error)
-    return children ? children(user) : <Tasks key={user.id} />;
+    return children ? children(user) : <Tasks key={user.id} userId={user.id} />;
   // Anonymous revalidation sets isPending again on focus or reconnect. Keep
   // the form mounted so its email, entered code, and resend timer survive.
   if (!user && (hasResolvedSession || sessionResolved))

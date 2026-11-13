@@ -57,6 +57,7 @@ try {
   assert.equal("priority" in task, false);
   assert.equal("completed" in task, false);
   assert.equal(task.completedAt, null);
+  assert.equal(task.deletedAt, null);
   assert.equal(task.dueKind, "none");
   assert.equal(task.dueAt, null);
   const dateDue = await (
@@ -142,18 +143,38 @@ try {
   assert.equal((await (await request()).json())[0].completedAt, null);
   assert.equal((await request(`/${task.id}`, "PATCH", {})).status, 400);
   assert.equal((await request("", "PUT")).status, 405);
+  const undoFixture = await (await request(`/${task.id}`, "PATCH", {
+    title: "Undo preserves everything",
+    completedAt: "2026-11-13T18:00:00.000Z",
+    dueKind: "datetime", dueAt: "2026-12-14T00:00:00+09:00", timeZone: "Asia/Tokyo",
+  })).json();
+  assert.equal((await request(`/${task.id}`, "DELETE")).status, 204);
+  assert.equal((await request(`/${task.id}`, "DELETE")).status, 204, "Delete retries are idempotent");
+  assert.deepEqual(await (await request()).json(), [], "Deleted tasks stay out of normal lists");
+  assert.equal((await request(`/${task.id}`, "PATCH", { title: "Must not edit deleted task" })).status, 404);
+  assert.equal((await request(`/${task.id}/restore`, "POST", undefined, stranger)).status, 404);
+  assert.equal((await fetch(`${base}/api/tasks/${task.id}/restore`, { method: "POST", headers: { Origin: base } })).status, 401);
+  assert.equal((await request(`/${task.id}/restore`, "GET")).status, 405);
+  assert.equal((await request(`/${crypto.randomUUID()}/restore`, "POST")).status, 404);
+  assert.equal((await fetch(`${base}/api/tasks/${task.id}/restore`, {
+    method: "POST", headers: { Cookie: owner, Origin: "https://evil.example" },
+  })).status, 403);
+  assert.deepEqual(await (await request()).json(), []);
+  assert.deepEqual(await (await request(`/${task.id}/restore`, "POST")).json(), undoFixture);
+  assert.deepEqual(await (await request(`/${task.id}/restore`, "POST")).json(), undoFixture, "Restore retries preserve metadata");
+  assert.deepEqual(await (await request()).json(), [undoFixture]);
 } finally {
   assert.equal((await request(`/${task.id}`, "DELETE")).status, 204);
 }
 assert.deepEqual(await (await request()).json(), []);
-assert.equal((await request(`/${task.id}`, "DELETE")).status, 404);
+assert.equal((await request(`/${task.id}`, "DELETE")).status, 204);
 assert.equal((await fetch(`${base}/api/missing`)).status, 404);
 if (process.env.CHECK_PWA === "1") {
   assert.equal((await fetch(`${base}/manifest.json`)).status, 200);
   assert.equal((await fetch(`${base}/sw.js`)).status, 200);
 }
 console.log(
-  "API smoke passed: CRUD, validation, account isolation, and deletion.",
+  "API smoke passed: CRUD, validation, account isolation, soft deletion, and exact restore.",
 );
 
 const preflight = await fetch(`${base}/api/tasks`, {

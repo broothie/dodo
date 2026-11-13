@@ -20,6 +20,7 @@ import {
   YStack,
   useTheme,
   getVariableValue,
+  toast,
 } from "tamagui";
 import Check from "lucide-react-native/icons/check";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
@@ -61,11 +62,12 @@ function CompletionIcon() {
   return <Check size={16} color={getVariableValue(theme.color)} />;
 }
 
-export default function Tasks() {
+export default function Tasks({ userId }: { userId: string }) {
   const insets = useSafeAreaInsets();
   const mutationQueue = useRef(Promise.resolve());
   const savingTitles = useRef(new Set<string>());
   const removingTasks = useRef(new Set<string>());
+  const restoringTasks = useRef(new Set<string>());
   const taskInputs = useRef(new Map<string, RefObject<ComponentRef<typeof Input> | null>>());
   const focusedTask = useRef<string | null>(null);
   const newTaskInput = useRef<ComponentRef<typeof Input>>(null);
@@ -86,7 +88,6 @@ export default function Tasks() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editLiteralRanges, setEditLiteralRanges] = useState<TextRange[]>([]);
-  const [deleting, setDeleting] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const editingTask = tasks.find((task) => task.id === editing);
   const newParsed = useMemo(
@@ -174,7 +175,6 @@ export default function Tasks() {
         list.map((task) => (task.id === saved.id ? saved : task)),
       );
       setEditing((current) => (current === task.id ? null : current));
-      setDeleting((current) => (current === task.id ? null : current));
     });
     return result;
   }
@@ -192,12 +192,12 @@ export default function Tasks() {
     const visible = groupTasksByDate(tasks).flatMap(section => section.data);
     const index = visible.findIndex(item => item.id === task.id);
     const neighbour = visible[index - 1] ?? visible[index + 1];
+    const previousId = tasks[tasks.findIndex(item => item.id === task.id) - 1]?.id ?? null;
     try {
       await mutate(async () => {
         await api.remove(task.id);
         setTasks(list => list.filter(item => item.id !== task.id));
         setEditing(current => current === task.id ? null : current);
-        setDeleting(current => current === task.id ? null : current);
         setDueEditor(current => current === task.id ? null : current);
         setNewAfter(current => current === task.id ? null : current);
         taskInputs.current.delete(task.id);
@@ -205,8 +205,31 @@ export default function Tasks() {
           focusedTask.current = null;
           taskInputs.current.get(neighbour.id)?.current?.focus();
         }
+        toast("Task deleted", {
+          toasterId: userId,
+          description: task.title,
+          duration: 8000,
+          action: { label: "Undo", onClick: () => void restoreTask(task, previousId) },
+        });
       });
     } finally { removingTasks.current.delete(task.id); }
+  }
+  async function restoreTask(task: Task, previousId: string | null) {
+    if (restoringTasks.current.has(task.id)) return;
+    restoringTasks.current.add(task.id);
+    try {
+      const restored = await api.restore(task.id);
+      setTasks(list => list.some(item => item.id === restored.id)
+        ? list.map(item => item.id === restored.id ? restored : item)
+        : insertTaskAfter(list, restored, previousId));
+      toast.success("Task restored", { toasterId: userId });
+    } catch {
+      toast.error("Could not restore task", {
+        toasterId: userId,
+        duration: 8000,
+        action: { label: "Retry", onClick: () => void restoreTask(task, previousId) },
+      });
+    } finally { restoringTasks.current.delete(task.id); }
   }
   async function finishEditing(task: Task, deleteEmpty = false) {
     if (editing !== task.id || savingTitles.current.has(task.id) || removingTasks.current.has(task.id)) return null;
@@ -220,7 +243,6 @@ export default function Tasks() {
     }
     if (editParsed.title === task.title && !editParsed.matches.length) {
       setEditing((current) => (current === task.id ? null : current));
-      setDeleting((current) => (current === task.id ? null : current));
       return task;
     }
     savingTitles.current.add(task.id);
@@ -295,13 +317,11 @@ export default function Tasks() {
     setEditLiteralRanges([{ start: 0, end: task.title.length }]);
     setEditReference(new Date());
     setDueEditor(null);
-    setDeleting(null);
   }
   function cancelEditing() {
     setError("");
     setEditing(null);
     setDueEditor(null);
-    setDeleting(null);
   }
   function beginAdding() {
     setError("");
@@ -509,7 +529,6 @@ export default function Tasks() {
                                 setDueEditor(
                                   dueEditor === item.id ? null : item.id,
                                 );
-                                setDeleting(null);
                               }}
                             />
                             <Button
@@ -518,12 +537,7 @@ export default function Tasks() {
                               aria-label={`Delete ${item.title}`}
                               icon={Trash2}
                               disabled={busy}
-                              onPress={() => {
-                                setDeleting(
-                                  deleting === item.id ? null : item.id,
-                                );
-                                setDueEditor(null);
-                              }}
+                              onPress={() => void removeTask(item)}
                             >
                               Delete
                             </Button>
@@ -542,24 +556,6 @@ export default function Tasks() {
                         </XStack>
                       )}
 
-                      {editing === item.id && deleting === item.id && (
-                        <YStack gap="3" pb="3">
-                          <Paragraph>Delete this task?</Paragraph>
-                          <XStack gap="2">
-                            <Button
-                              theme="red"
-                              icon={Trash2}
-                              disabled={busy}
-                              onPress={() => void removeTask(item)}
-                            >
-                              Delete
-                            </Button>
-                            <Button onPress={() => setDeleting(null)}>
-                              Keep it
-                            </Button>
-                          </XStack>
-                        </YStack>
-                      )}
                     </YStack>
                   </TaskEditBoundary>
                   {composerAnchor === item.id && newTaskRow}

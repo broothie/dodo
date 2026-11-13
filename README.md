@@ -127,14 +127,18 @@ The screens already use React Native primitives. Configure `EXPO_PUBLIC_API_URL`
 
 ## TODO
 
-- [ ] Remove delete confirmation step.
+- [x] Remove delete confirmation step and add Undo.
 - [ ] Set up notifications.
 - [ ] Set up platform syncing.
 - [ ] Add animations.
 
 ## Empty tasks
 
-Backspace on an already empty or whitespace-only existing title deletes the task immediately and focuses a neighbouring task when possible. Leaving an existing task empty also deletes it. These actions bypass the button's confirmation step. Removing the last character alone does not delete the task; it takes another Backspace or leaving the task. An empty unsaved row simply closes, and Escape still discards an existing edit. Failed deletes leave the task available to retry.
+Backspace on an already empty or whitespace-only existing title deletes the task immediately and focuses a neighbouring task when possible. Leaving an existing task empty also deletes it. Removing the last character alone does not delete the task; it takes another Backspace or leaving the task. An empty unsaved row simply closes, and Escape still discards an existing edit. Failed deletes leave the task available to retry.
+
+## Deletion and Undo
+
+All delete controls act immediately. A Tamagui toast offers Undo for eight seconds, including keyboard and empty-task deletions. `deletedAt` is nullable task metadata backed by `deleted_at` in D1: DELETE sets it, active lists exclude it, and ordinary edits cannot change deleted tasks. The owner-scoped `POST /api/tasks/:id/restore` clears it while preserving the task's ID, timestamps, deadline, and completion state. Delete and restore are safe to retry. Undo failures offer Retry, and account-scoped toasts clear when accounts change. Deleted rows are retained; automatic purging and a trash view are not implemented.
 
 ## Task completion
 

@@ -5,6 +5,7 @@ type Row = {
   id: string;
   title: string;
   completed_at: string | null;
+  deleted_at: string | null;
   due_kind: string;
   due_at: string | null;
   time_zone: string | null;
@@ -12,7 +13,7 @@ type Row = {
   updated_at: string;
 };
 const columns =
-  "id, title, completed_at, due_kind, due_at, time_zone, created_at, updated_at";
+  "id, title, completed_at, deleted_at, due_kind, due_at, time_zone, created_at, updated_at";
 function task(row: Row): Task {
   return {
     ...parseDue({
@@ -23,6 +24,7 @@ function task(row: Row): Task {
     id: row.id,
     title: row.title,
     completedAt: row.completed_at,
+    deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -77,7 +79,7 @@ const app = {
       if (
         url.pathname !== "/api/tasks" &&
         url.pathname !== "/api/tasks/claim" &&
-        !/^\/api\/tasks\/[a-f0-9-]{36}$/.test(url.pathname)
+        !/^\/api\/tasks\/[a-f0-9-]{36}(?:\/restore)?$/.test(url.pathname)
       )
         return json({ error: "Not found." }, 404);
       const session = await auth.api.getSession({ headers: request.headers });
@@ -107,9 +109,17 @@ const app = {
           : json({ error: "These browser tasks were already claimed by another account." }, 409);
       }
       const id = url.pathname.split("/")[3];
+      if (url.pathname.endsWith("/restore")) {
+        if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+        // Idempotent and owner-scoped: restoring never recreates or rewrites a task.
+        const row = await env.DB.prepare(
+          `UPDATE tasks SET deleted_at = NULL WHERE id = ? AND owner = ? RETURNING ${columns}`,
+        ).bind(id, owner).first<Row>();
+        return row ? json(task(row)) : json({ error: "Task not found." }, 404);
+      }
       if (request.method === "GET" && !id) {
         const rows = await env.DB.prepare(
-          `SELECT ${columns} FROM tasks WHERE owner = ? ORDER BY created_at DESC, id DESC`,
+          `SELECT ${columns} FROM tasks WHERE owner = ? AND deleted_at IS NULL ORDER BY created_at DESC, id DESC`,
         )
           .bind(owner)
           .all<Row>();
@@ -117,9 +127,9 @@ const app = {
       }
       if (request.method === "DELETE" && id) {
         const result = await env.DB.prepare(
-          "DELETE FROM tasks WHERE id = ? AND owner = ?",
+          "UPDATE tasks SET deleted_at = COALESCE(deleted_at, ?) WHERE id = ? AND owner = ?",
         )
-          .bind(id, owner)
+          .bind(new Date().toISOString(), id, owner)
           .run();
         return result.meta.changes
           ? new Response(null, { status: 204 })
@@ -182,7 +192,7 @@ const app = {
           return json(task(row!), 201);
         }
         const row = await env.DB.prepare(
-          `UPDATE tasks SET title = COALESCE(?, title), completed_at = CASE WHEN ? THEN ? ELSE completed_at END, due_kind = CASE WHEN ? THEN ? ELSE due_kind END, due_at = CASE WHEN ? THEN ? ELSE due_at END, time_zone = CASE WHEN ? THEN ? ELSE time_zone END, updated_at = ? WHERE id = ? AND owner = ? RETURNING ${columns}`,
+          `UPDATE tasks SET title = COALESCE(?, title), completed_at = CASE WHEN ? THEN ? ELSE completed_at END, due_kind = CASE WHEN ? THEN ? ELSE due_kind END, due_at = CASE WHEN ? THEN ? ELSE due_at END, time_zone = CASE WHEN ? THEN ? ELSE time_zone END, updated_at = ? WHERE id = ? AND owner = ? AND deleted_at IS NULL RETURNING ${columns}`,
         )
           .bind(
             input.title ?? null,

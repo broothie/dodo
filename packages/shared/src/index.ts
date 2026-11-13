@@ -5,6 +5,7 @@ export type Task = Due & {
   id: string;
   title: string;
   completedAt: string | null;
+  deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -101,5 +102,6 @@ export function createTaskClient(
     update: (id: string, patch: TaskPatch) =>
       request<Task>(`/${id}`, { method: "PATCH", body: JSON.stringify(patch) }),
     remove: (id: string) => request<void>(`/${id}`, { method: "DELETE" }),
+    restore: (id: string) => request<Task>(`/${id}/restore`, { method: "POST" }),
   };
 }

@@ -113,6 +113,7 @@ test("removing phrases restores the base deadline, while changing date or time p
     id: "example",
     title: "Call",
     completedAt: null,
+    deletedAt: null,
     createdAt: "2026-11-12T18:00:00Z",
     updatedAt: "2026-11-12T18:00:00Z",
   };

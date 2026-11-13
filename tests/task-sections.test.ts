@@ -4,7 +4,7 @@ import { groupTasksByDate, insertTaskAfter } from "../apps/app/src/lib/task-sect
 import { noDue, type Due } from "../packages/shared/src/scheduling.ts";
 
 function task(id: string, due: Due = noDue, completedAt: string | null = null) {
-  return { id, title: id, ...due, completedAt, createdAt: "2026-11-01T12:00:00.000Z", updatedAt: "2026-11-01T12:00:00.000Z" };
+  return { id, title: id, ...due, completedAt, deletedAt: null, createdAt: "2026-11-01T12:00:00.000Z", updatedAt: "2026-11-01T12:00:00.000Z" };
 }
 const date = (dueAt: string): Due => ({ dueKind: "date", dueAt, timeZone: null });
 const time = (dueAt: string): Due => ({ dueKind: "datetime", dueAt, timeZone: "Asia/Tokyo" });
