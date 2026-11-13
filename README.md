@@ -30,6 +30,8 @@ The first version supports task creation by pressing Enter, inline title editing
 
 ## Accounts
 
+The task page’s three-dot button opens Settings, with account details, sign-out, and Device / Light / Dark appearance options. Appearance defaults to Device, follows live system changes, and is saved on the current device (browser storage on web, SecureStore on native).
+
 Passwordless accounts use Better Auth on the Worker, with users, sessions, and auth rate limits in D1. Enter an email and verify a code; the first successful verification creates the account, with no name or password form. Password registration, login, and password-management endpoints are disabled. Existing accounts and task ownership remain intact; use the same email to sign in. All task queries require a valid session and scope ownership to its user ID. Signing in on another device opens the same task list. Web sessions use HttpOnly cookies; native uses Better Auth's Expo client and SecureStore. Sign-out revokes the current session in D1. Session responses and task data are never cached.
 
 The first sign-in on a previously anonymous installation imports its existing tasks using the old workspace key, then removes that key. Import is atomic and a key can only be claimed by one account; it no longer grants access to task CRUD. Other devices' old anonymous lists are imported when the same account signs in there.

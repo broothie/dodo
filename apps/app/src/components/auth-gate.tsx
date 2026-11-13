@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, H2, Paragraph, Spinner, YStack } from "tamagui";
+import { Button, getVariableValue, H2, Paragraph, Spinner, useTheme, YStack } from "tamagui";
 import { authClient } from "../lib/auth-client";
 import { importBrowserTasks } from "../lib/api";
 import Tasks from "./tasks";
 import { AccountForm } from "./account-form";
 
-export function AuthGate() {
+export type AccountUser = typeof authClient.$Infer.Session.user;
+
+export function AuthGate({ children }: { children?: (user: AccountUser) => ReactNode }) {
+  const theme = useTheme();
   const session = authClient.useSession();
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -32,9 +35,9 @@ export function AuthGate() {
     } finally { setSigningOut(false); }
   }
   if (user && readyFor === user.id && !signingOut && !error)
-    return <Tasks key={user.id} email={user.email} onSignOut={() => void signOut()} />;
+    return children ? children(user) : <Tasks key={user.id} />;
   if (!session.isPending && !user && !session.error) return <AccountForm />;
-  return <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
+  return <SafeAreaView style={{ flex: 1, backgroundColor: getVariableValue(theme.background) }}>
     <YStack p="4" gap="3" maxW={440} w="100%" self="center">
       <H2>Dodo</H2>
       {error || session.error ? <>

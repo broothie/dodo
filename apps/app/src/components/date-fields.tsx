@@ -3,6 +3,7 @@ import Clock from "lucide-react-native/icons/clock";
 import { useState } from "react";
 import { Platform } from "react-native";
 import { Button } from "tamagui";
+import { useAppearance } from "./appearance-provider";
 export { DateField } from "./calendar-field";
 
 type Props = {
@@ -19,6 +20,7 @@ export function TimeField({
   "aria-label": label,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const { scheme } = useAppearance();
   const [hours, minutes] = value.split(":").map(Number);
   const selected = new Date(2000, 0, 15, hours, minutes);
   const picker = (
@@ -26,6 +28,7 @@ export function TimeField({
       mode="time"
       value={selected}
       disabled={disabled}
+      themeVariant={scheme}
       display={Platform.OS === "ios" ? "compact" : "default"}
       presentation="dialog"
       onDismiss={() => setOpen(false)}

@@ -1,4 +1,5 @@
-import LogOut from "lucide-react-native/icons/log-out";
+import EllipsisVertical from "lucide-react-native/icons/ellipsis-vertical";
+import { Link } from "expo-router";
 import Calendar from "lucide-react-native/icons/calendar";
 import Clock from "lucide-react-native/icons/clock";
 import { DueDialog } from "../components/due-dialog";
@@ -41,7 +42,7 @@ function CompletionIcon() {
   return <Check size={16} color={getVariableValue(theme.color)} />;
 }
 
-export default function Tasks({ email, onSignOut }: { email: string; onSignOut: () => void }) {
+export default function Tasks() {
   const mutationQueue = useRef(Promise.resolve());
   const savingTitles = useRef(new Set<string>());
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -219,7 +220,7 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
   );
   return (
     <OutsideEditProvider>
-      <YStack flex={1} bg="white">
+      <YStack flex={1} bg="background">
         <SafeAreaView style={{ flex: 1 }}>
           <Head>
             <title>Dodo</title>
@@ -227,9 +228,10 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
           <YStack flex={1} w="100%" maxW={900} self="center" px="6" py="4" gap="4">
             <XStack items="center" justify="space-between" gap="3">
               <H2>Dodo</H2>
-              <Button size="sm" icon={LogOut} onPress={onSignOut}>Sign out</Button>
+              <Link href="/settings" asChild>
+                <Button size="sm" circular variant="outlined" borderWidth={0} icon={EllipsisVertical} aria-label="Settings" />
+              </Link>
             </XStack>
-            <Paragraph size="sm">{email}</Paragraph>
             <H3>Tasks</H3>
             {!!visibleError && (
               <YStack
@@ -257,7 +259,7 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
               active={adding && dueEditor !== "new"}
               onOutside={() => setAdding(false)}
             >
-              <YStack bg="white">
+              <YStack bg="background">
                 <XStack items="center" gap="3" pt="1" pb="0">
                   <Checkbox disabled aria-hidden={true} />
                   <TaskTitleInput
@@ -320,7 +322,7 @@ export default function Tasks({ email, onSignOut }: { email: string; onSignOut: 
                     active={editing === item.id && dueEditor !== item.id}
                     onOutside={() => void finishEditing(item)}
                   >
-                    <YStack bg="white">
+                    <YStack bg="background">
                       <XStack items="center" gap="3" pt="1" pb="0">
                         <Checkbox
                           aria-label={`Complete ${item.title}`}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, H2, H3, Input, Paragraph, YStack } from "tamagui";
+import { Button, getVariableValue, H2, H3, Input, Paragraph, useTheme, YStack } from "tamagui";
 import { authClient } from "../lib/auth-client";
 
 function check(result: { error?: { message?: string } | null }) {
@@ -8,6 +8,7 @@ function check(result: { error?: { message?: string } | null }) {
 }
 
 export function AccountForm() {
+  const theme = useTheme();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export function AccountForm() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: "white" }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: getVariableValue(theme.background) }}>
       <YStack p="4" gap="4" w="100%" maxW={440} self="center">
         <H2>Dodo</H2>
         <H3>{sentTo ? "Check your email" : "Sign in"}</H3>

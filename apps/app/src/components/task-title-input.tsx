@@ -39,7 +39,7 @@ export function TaskTitleInput({
         ref={ref}
         fontSize="lg"
         lineHeight="lg"
-        bg="white"
+        bg="background"
         color={decorated ? "transparent" : "color"}
         caretColor="color"
         cursorColor="color"

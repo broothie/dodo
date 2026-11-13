@@ -1,17 +1,20 @@
-import { TamaguiProvider } from "tamagui";
-import { tamaguiConfig } from "../../tamagui.config";
 import { Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { registerPwa } from "../lib/pwa";
+import { AppearanceProvider } from "../components/appearance-provider";
+import { getVariableValue, useTheme } from "tamagui";
+
+function Screens() {
+  const theme = useTheme();
+  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: getVariableValue(theme.background) } }} />;
+}
 export default function Layout() {
   useEffect(() => {
     registerPwa();
   }, []);
   return (
-    <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
-      <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false }} />
-    </TamaguiProvider>
+    <AppearanceProvider>
+      <Screens />
+    </AppearanceProvider>
   );
 }

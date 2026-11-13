@@ -9,6 +9,7 @@ import {
   getVariableValue,
   Paragraph,
   useTheme,
+  useThemeName,
   XStack,
   YStack,
 } from "tamagui";
@@ -29,15 +30,21 @@ export function TimeField({
 }: Props) {
   const [view, setView] = useState<"hours" | "minutes">("hours");
   const theme = useTheme();
+  const mode = useThemeName().startsWith("dark") ? "dark" : "light";
   const color = getVariableValue(theme.color);
   const background = getVariableValue(theme.background);
   const clockTheme = useMemo(
     () =>
       createTheme({
-        palette: { primary: { main: color, contrastText: background } },
+        palette: {
+          mode,
+          primary: { main: color, contrastText: background },
+          background: { default: background, paper: background },
+          text: { primary: color },
+        },
         typography: { fontFamily: "inherit" },
       }),
-    [color, background],
+    [color, background, mode],
   );
   const selected = dayjs(`2000-01-15T${value}:00`);
   const afternoon = selected.hour() >= 12;
