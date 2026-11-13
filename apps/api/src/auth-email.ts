@@ -2,9 +2,19 @@ import { APIError } from "better-auth/api";
 
 export type AuthEmail = { to: string; subject: string; text: string; html: string };
 
-export function authEmail(to: string, subject: string, text: string): AuthEmail {
-  const escaped = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-  return { to, subject, text, html: `<p>${escaped.replaceAll("\n", "<br>")}</p>` };
+function escapeHtml(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+export function authCodeEmail(to: string, purpose: string, code: string): AuthEmail {
+  const introduction = `Your verification code to ${purpose} is:`;
+  const footer = "This code expires in 5 minutes. If you didn’t request it, ignore this email.";
+  return {
+    to,
+    subject: "Your Dodo verification code",
+    text: `${introduction}\n\n${code}\n\n${footer}`,
+    html: `<p>${escapeHtml(introduction)}</p><p><code style="font-family: monospace; font-size: 24px; font-weight: 700;">${escapeHtml(code)}</code></p><p>${footer}</p>`,
+  };
 }
 
 export async function sendAuthEmail(env: Env, message: AuthEmail) {

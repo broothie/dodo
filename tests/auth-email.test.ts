@@ -1,10 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { authEmail, sendAuthEmail } from "../apps/api/src/auth-email.ts";
+import { authCodeEmail, sendAuthEmail } from "../apps/api/src/auth-email.ts";
+
+test("verification emails keep the complete code in plain text and a safe HTML code block", () => {
+  const message = authCodeEmail("fixture@example.test", "sign in to Dodo <unsafe>&", "012345");
+  assert.match(message.subject, /verification code/i);
+  assert.match(message.text, /\n\n012345\n\n/);
+  assert.match(message.html, /<code\b[^>]*>012345<\/code>/);
+  assert.match(message.html, /&lt;unsafe&gt;&amp;/);
+  assert.match(message.text, /expires in 5 minutes/);
+  const unsafeCode = authCodeEmail("fixture@example.test", "sign in", "</code><script>bad</script>");
+  assert.ok(!unsafeCode.html.includes("<script>"));
+});
 
 test("auth mail uses Resend in production, restricts local capture, and reports delivery failure safely", async () => {
   const originalFetch = globalThis.fetch;
-  const message = authEmail("fixture@example.test", "Dodo test", "<unsafe>&\n123456");
+  const message = authCodeEmail("fixture@example.test", "sign in to Dodo", "123456");
   const config = {
     BETTER_AUTH_URL: "https://dodotasks.xyz",
     AUTH_EMAIL_DEV_URL: "http://localhost:8787/__dev/mail",
@@ -19,7 +30,6 @@ test("auth mail uses Resend in production, restricts local capture, and reports 
     };
     await sendAuthEmail(config,message);
     assert.equal(calls[0].url,"https://api.resend.com/emails");
-    assert.match(message.html,/&lt;unsafe&gt;&amp;/);
     const local = {...config,BETTER_AUTH_URL:"http://localhost:8787"} as typeof config;
     await sendAuthEmail(local,message);
     assert.equal(calls[1].url,"http://localhost:8787/__dev/mail");

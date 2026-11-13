@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, getVariableValue, H2, H3, Input, Paragraph, useTheme, YStack } from "tamagui";
 import { authClient } from "../lib/auth-client";
@@ -69,7 +70,8 @@ export function AccountForm() {
             <Paragraph>Enter the code sent to {sentTo}.</Paragraph>
             <Input aria-label="Email code" placeholder="6-digit code" value={code}
               onChangeText={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
-              autoComplete="one-time-code" keyboardType="number-pad" maxLength={6}
+              autoComplete={Platform.OS === "android" ? "email-otp" : "one-time-code"}
+              keyboardType="number-pad" maxLength={6}
               readOnly={busy} onSubmitEditing={submit} returnKeyType="go" />
             <Button theme="accent" disabled={busy || code.length !== 6} onPress={submit}>
               {busy ? "Signing in…" : "Sign in"}

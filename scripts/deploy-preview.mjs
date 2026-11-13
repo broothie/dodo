@@ -36,7 +36,7 @@ export function previewConfig(source, branch, database) {
     // Even top-level migrations in this generated file can only target the Preview DB.
     d1_databases: [binding],
     vars,
-    secrets: { required: ['BETTER_AUTH_SECRET'] },
+    secrets: { required: ['BETTER_AUTH_SECRET', 'RESEND_API_KEY'] },
     previews: { ...source.previews, vars, d1_databases: [binding] },
   };
 }

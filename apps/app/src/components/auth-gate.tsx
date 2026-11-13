@@ -11,12 +11,15 @@ export type AccountUser = typeof authClient.$Infer.Session.user;
 export function AuthGate({ children }: { children?: (user: AccountUser) => ReactNode }) {
   const theme = useTheme();
   const session = authClient.useSession();
+  const [hasResolvedSession, setHasResolvedSession] = useState(false);
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
   const user = session.data?.user;
   const userId = user?.id;
+  const sessionResolved = !session.isPending && !session.error;
+  if (sessionResolved && !hasResolvedSession) setHasResolvedSession(true);
   useEffect(() => {
     let active = true;
     if (userId) importBrowserTasks().then(() => {
@@ -36,7 +39,10 @@ export function AuthGate({ children }: { children?: (user: AccountUser) => React
   }
   if (user && readyFor === user.id && !signingOut && !error)
     return children ? children(user) : <Tasks key={user.id} />;
-  if (!session.isPending && !user && !session.error) return <AccountForm />;
+  // Anonymous revalidation sets isPending again on focus or reconnect. Keep
+  // the form mounted so its email, entered code, and resend timer survive.
+  if (!user && (hasResolvedSession || sessionResolved))
+    return <AccountForm />;
   return <SafeAreaView style={{ flex: 1, backgroundColor: getVariableValue(theme.background) }}>
     <YStack p="4" gap="3" maxW={440} w="100%" self="center">
       <H2>Dodo</H2>
