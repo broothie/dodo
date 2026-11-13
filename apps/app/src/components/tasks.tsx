@@ -232,7 +232,7 @@ export default function Tasks() {
                 <Button size="sm" circular variant="outlined" borderWidth={0} icon={EllipsisVertical} aria-label="Settings" />
               </Link>
             </XStack>
-            <H3>Tasks</H3>
+            <H3>Tasks ({tasks.length})</H3>
             {!!visibleError && (
               <YStack
                 theme="red"
@@ -254,7 +254,6 @@ export default function Tasks() {
                 </Button>
               </YStack>
             )}
-            <Paragraph>{`${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`}</Paragraph>
             <TaskEditBoundary
               active={adding && dueEditor !== "new"}
               onOutside={() => setAdding(false)}
