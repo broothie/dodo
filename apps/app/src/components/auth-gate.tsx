@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, getVariableValue, H2, Paragraph, Spinner, useTheme, YStack } from "tamagui";
+import { Button, getVariableValue, Paragraph, Spinner, useTheme, YStack } from "tamagui";
 import { authClient } from "../lib/auth-client";
 import { importBrowserTasks } from "../lib/api";
 import Tasks from "./tasks";
 import { AccountForm } from "./account-form";
+import { Brand } from "./brand";
 
 export type AccountUser = typeof authClient.$Infer.Session.user;
 
@@ -45,7 +46,7 @@ export function AuthGate({ children }: { children?: (user: AccountUser) => React
     return <AccountForm />;
   return <SafeAreaView style={{ flex: 1, backgroundColor: getVariableValue(theme.background) }}>
     <YStack p="4" gap="3" maxW={440} w="100%" self="center">
-      <H2>Dodo</H2>
+      <Brand />
       {error || session.error ? <>
         <Paragraph role="alert">{error || "Could not check your session. Please try again."}</Paragraph>
         <Button onPress={() => { setError(""); setRetry(value => value + 1); void session.refetch(); }}>Retry</Button>

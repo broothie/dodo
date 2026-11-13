@@ -54,7 +54,7 @@ export function createAuth(env: Env) {
         async sendVerificationOTP({ email, otp, type }) {
           if (type === "forget-password") return;
           const purpose = type === "sign-in" ? "sign in to Dodo" : "verify your Dodo email";
-          await sendAuthEmail(env, authCodeEmail(email, purpose, otp));
+          await sendAuthEmail(env, authCodeEmail(email, purpose, otp, env.BETTER_AUTH_URL));
         },
       }),
     ],

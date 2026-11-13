@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, getVariableValue, H2, H3, Input, Paragraph, useTheme, YStack } from "tamagui";
+import { Button, getVariableValue, H3, Input, Paragraph, useTheme, YStack } from "tamagui";
 import { authClient } from "../lib/auth-client";
+import { Brand } from "./brand";
 
 function check(result: { error?: { message?: string } | null }) {
   if (result.error) throw new Error(result.error.message || "Could not sign in. Please try again.");
@@ -63,7 +64,7 @@ export function AccountForm() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: getVariableValue(theme.background) }}>
       <YStack p="4" gap="4" w="100%" maxW={440} self="center">
-        <H2>Dodo</H2>
+        <Brand />
         <H3>{sentTo ? "Check your email" : "Sign in"}</H3>
         {sentTo ? (
           <>

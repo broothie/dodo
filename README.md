@@ -117,6 +117,10 @@ The `Clean up PR preview` GitHub Actions workflow removes a closed or merged PR'
 
 Cleanup requires the repository secret `CLOUDFLARE_PREVIEW_CLEANUP_TOKEN`, with Worker Editor access restricted to `dodo` and D1 Write for this Cloudflare account. It does not use the production build credential, DNS permissions, or email-sending key. The workflow's GitHub token only reads repository metadata and check status. To clean up an older closed PR or retry a failed cleanup, run `Clean up PR preview` manually with its PR number; the manual workflow defaults to a dry run. Check the named resources in that run's logs before running with `dry_run=false`. D1's database quota also applies to previews.
 
+## Branding
+
+`apps/app/assets/logo-v1.png` is the selected v1 artwork. The shared `Brand` and `Logo` components use it in the app, sign-in, loading, and settings headers. `npm run assets:brand -w @dodo/app` regenerates the wordmark image, favicon, Apple touch icon, PWA icons, and native launcher icons from that source; the web build runs it automatically. Maskable icons include extra padding. Sign-in emails load `/logo-v1.png` from the current app's origin. Generated sizes are checked in so local development has the same branding without a production build.
+
 ## Native next steps
 
 The screens already use React Native primitives. Configure `EXPO_PUBLIC_API_URL` with your HTTPS Worker URL, choose iOS/Android application identifiers in app.json, and use Expo development builds. Test on actual native devices before releasing. Platform-specific auth clients, legacy workspace storage, and PWA registration are isolated in `.web.ts` adapters. Native builds have not yet been verified.

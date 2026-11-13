@@ -43,7 +43,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build": "expo export --platform web && node scripts/build-pwa.mjs",
+    "assets:brand": "node scripts/build-brand-assets.mjs",
+    "build": "npm run assets:brand && expo export --platform web && node scripts/build-pwa.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "expo lint"
   },

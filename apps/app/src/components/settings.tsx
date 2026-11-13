@@ -8,6 +8,7 @@ import { Button, Card, getVariableValue, H2, H3, Paragraph, ScrollView, useTheme
 import { authClient } from "../lib/auth-client";
 import type { AccountUser } from "./auth-gate";
 import { useAppearance, type AppearancePreference } from "./appearance-provider";
+import { Logo } from "./brand";
 
 const appearanceOptions: { value: AppearancePreference; label: string }[] = [
   { value: "device", label: "Device" },
@@ -41,7 +42,8 @@ export function Settings({ user }: { user: AccountUser }) {
             <Link href="/" asChild>
               <Button size="sm" circular variant="outlined" borderWidth={0} icon={ArrowLeft} aria-label="Back to tasks" />
             </Link>
-            <H2>Settings</H2>
+            <H2 flex={1}>Settings</H2>
+            <Logo size={32} />
           </XStack>
           <Card theme="level2" p="4" gap="3">
             <H3>Account</H3>

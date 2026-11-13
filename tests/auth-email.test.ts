@@ -7,6 +7,9 @@ test("verification emails keep the complete code in plain text and a safe HTML c
   assert.match(message.subject, /verification code/i);
   assert.match(message.text, /\n\n012345\n\n/);
   assert.match(message.html, /<code\b[^>]*>012345<\/code>/);
+  assert.match(message.html, /src="https:\/\/dodotasks\.xyz\/logo-v1\.png"/);
+  const preview = authCodeEmail("fixture@example.test", "sign in", "012345", "https://preview.example.test");
+  assert.match(preview.html, /src="https:\/\/preview\.example\.test\/logo-v1\.png"/);
   assert.match(message.html, /&lt;unsafe&gt;&amp;/);
   assert.match(message.text, /expires in 5 minutes/);
   const unsafeCode = authCodeEmail("fixture@example.test", "sign in", "</code><script>bad</script>");

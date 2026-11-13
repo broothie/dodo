@@ -16,7 +16,9 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="theme-color" content="#ffffff" />
         <meta name="description" content="Manage your tasks with Dodo." />
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="icon" type="image/png" sizes="32x32" href="/favicon-v1-32.png" />
+        <link rel="icon" type="image/png" sizes="16x16" href="/favicon-v1-16.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-v1.png" />
         <style dangerouslySetInnerHTML={{ __html: tamaguiConfig.getCSS() }} />
         <ScrollViewStyleReset />
       </head>

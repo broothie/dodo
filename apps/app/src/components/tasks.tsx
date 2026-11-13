@@ -2,6 +2,7 @@ import EllipsisVertical from "lucide-react-native/icons/ellipsis-vertical";
 import { Link } from "expo-router";
 import { DueDialog } from "../components/due-dialog";
 import { DueChip } from "../components/due-chip";
+import { Brand } from "./brand";
 import { TaskTitleInput } from "../components/task-title-input";
 import {
   OutsideEditProvider,
@@ -10,7 +11,6 @@ import {
 import {
   Button,
   Checkbox,
-  H2,
   H3,
   H4,
   Input,
@@ -258,7 +258,7 @@ export default function Tasks() {
           </Head>
           <YStack flex={1} w="100%" maxW={900} self="center" px="6" py="4" gap="4">
             <XStack items="center" justify="space-between" gap="3">
-              <H2>Dodo</H2>
+              <Brand />
               <Link href="/settings" asChild>
                 <Button size="sm" circular variant="outlined" borderWidth={0} icon={EllipsisVertical} aria-label="Settings" />
               </Link>

@@ -3,17 +3,18 @@ import { APIError } from "better-auth/api";
 export type AuthEmail = { to: string; subject: string; text: string; html: string };
 
 function escapeHtml(value: string) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
-export function authCodeEmail(to: string, purpose: string, code: string): AuthEmail {
+export function authCodeEmail(to: string, purpose: string, code: string, baseUrl = "https://dodotasks.xyz"): AuthEmail {
   const introduction = `Your verification code to ${purpose} is:`;
   const footer = "This code expires in 5 minutes. If you didn’t request it, ignore this email.";
+  const logoUrl = escapeHtml(new URL("/logo-v1.png", baseUrl).href);
   return {
     to,
     subject: "Your Dodo verification code",
     text: `${introduction}\n\n${code}\n\n${footer}`,
-    html: `<p>${escapeHtml(introduction)}</p><p><code style="font-family: monospace; font-size: 24px; font-weight: 700;">${escapeHtml(code)}</code></p><p>${footer}</p>`,
+    html: `<table role="presentation" cellpadding="0" cellspacing="0"><tr><td><img src="${logoUrl}" width="40" height="40" alt="" style="display: block; border-radius: 8px;" /></td><td style="padding-left: 8px; font: bold 24px sans-serif;">Dodo</td></tr></table><p>${escapeHtml(introduction)}</p><p><code style="font-family: monospace; font-size: 24px; font-weight: 700;">${escapeHtml(code)}</code></p><p>${footer}</p>`,
   };
 }
 
