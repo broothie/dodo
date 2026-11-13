@@ -25,7 +25,7 @@ import Check from "lucide-react-native/icons/check";
 import RotateCw from "lucide-react-native/icons/rotate-cw";
 import Trash2 from "lucide-react-native/icons/trash-2";
 import Plus from "lucide-react-native/icons/plus";
-import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
+import { createRef, useEffect, useMemo, useRef, useState, type ComponentRef, type RefObject } from "react";
 import { SectionList } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Head from "expo-router/head";
@@ -65,6 +65,9 @@ export default function Tasks() {
   const insets = useSafeAreaInsets();
   const mutationQueue = useRef(Promise.resolve());
   const savingTitles = useRef(new Set<string>());
+  const removingTasks = useRef(new Set<string>());
+  const taskInputs = useRef(new Map<string, RefObject<ComponentRef<typeof Input> | null>>());
+  const focusedTask = useRef<string | null>(null);
   const newTaskInput = useRef<ComponentRef<typeof Input>>(null);
   const creatingTask = useRef(false);
   const newTaskFocused = useRef(false);
@@ -175,8 +178,42 @@ export default function Tasks() {
     });
     return result;
   }
-  async function finishEditing(task: Task) {
-    if (editing !== task.id || savingTitles.current.has(task.id)) return null;
+  function taskInputRef(id: string) {
+    let ref = taskInputs.current.get(id);
+    if (!ref) {
+      ref = createRef<ComponentRef<typeof Input>>();
+      taskInputs.current.set(id, ref);
+    }
+    return ref;
+  }
+  async function removeTask(task: Task, moveFocus = false) {
+    if (removingTasks.current.has(task.id) || savingTitles.current.has(task.id)) return;
+    removingTasks.current.add(task.id);
+    const visible = groupTasksByDate(tasks).flatMap(section => section.data);
+    const index = visible.findIndex(item => item.id === task.id);
+    const neighbour = visible[index - 1] ?? visible[index + 1];
+    try {
+      await mutate(async () => {
+        await api.remove(task.id);
+        setTasks(list => list.filter(item => item.id !== task.id));
+        setEditing(current => current === task.id ? null : current);
+        setDeleting(current => current === task.id ? null : current);
+        setDueEditor(current => current === task.id ? null : current);
+        setNewAfter(current => current === task.id ? null : current);
+        taskInputs.current.delete(task.id);
+        if (moveFocus && focusedTask.current === task.id && neighbour) {
+          focusedTask.current = null;
+          taskInputs.current.get(neighbour.id)?.current?.focus();
+        }
+      });
+    } finally { removingTasks.current.delete(task.id); }
+  }
+  async function finishEditing(task: Task, deleteEmpty = false) {
+    if (editing !== task.id || savingTitles.current.has(task.id) || removingTasks.current.has(task.id)) return null;
+    if (deleteEmpty && !editTitle.trim()) {
+      await removeTask(task);
+      return null;
+    }
     if (editParsed.error || !editParsed.title) {
       setError(editParsed.error || "Add a task title as well as a deadline.");
       return null;
@@ -303,6 +340,10 @@ export default function Tasks() {
               setError("");
             }}
             onSubmitEditing={() => void addTask()}
+            onEmptyBackspace={() => {
+              closeAdding();
+              if (newAfter) taskInputs.current.get(newAfter)?.current?.focus();
+            }}
             onKeyDown={(event) => {
               if (event.key === "Escape") closeAdding();
             }}
@@ -393,7 +434,7 @@ export default function Tasks() {
                   <>
                   <TaskEditBoundary
                     active={editing === item.id && dueEditor !== item.id}
-                    onOutside={() => void finishEditing(item)}
+                    onOutside={() => void finishEditing(item, true)}
                   >
                     <YStack bg="background">
                       <XStack items="center" gap="3" pt="1" pb="0">
@@ -415,6 +456,7 @@ export default function Tasks() {
                           </Checkbox.Indicator>
                         </Checkbox>
                         <TaskTitleInput
+                          inputRef={taskInputRef(item.id)}
                           aria-label={`Task title: ${item.title}`}
                           readOnly={busy}
                           maxLength={300}
@@ -424,7 +466,11 @@ export default function Tasks() {
                           completed={item.completedAt !== null}
                           value={editing === item.id ? editTitle : item.title}
                           onFocus={() => {
+                            focusedTask.current = item.id;
                             if (editing !== item.id) beginEditing(item);
+                          }}
+                          onBlur={() => {
+                            if (focusedTask.current === item.id) focusedTask.current = null;
                           }}
                           onChangeText={(text) => {
                             if (editing !== item.id) {
@@ -444,6 +490,7 @@ export default function Tasks() {
                           onSubmitEditing={() => {
                             void submitExisting(item);
                           }}
+                          onEmptyBackspace={() => void removeTask(item, true)}
                           blurOnSubmit={false}
                           submitBehavior="submit"
                           enterKeyHint="enter"
@@ -503,17 +550,7 @@ export default function Tasks() {
                               theme="red"
                               icon={Trash2}
                               disabled={busy}
-                              onPress={() =>
-                                void mutate(async () => {
-                                  await api.remove(item.id);
-                                  setTasks((list) =>
-                                    list.filter((task) => task.id !== item.id),
-                                  );
-                                  setDeleting(null);
-                                  setEditing(null);
-                                  setDueEditor(null);
-                                })
-                              }
+                              onPress={() => void removeTask(item)}
                             >
                               Delete
                             </Button>

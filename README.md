@@ -132,6 +132,10 @@ The screens already use React Native primitives. Configure `EXPO_PUBLIC_API_URL`
 - [ ] Set up platform syncing.
 - [ ] Add animations.
 
+## Empty tasks
+
+Backspace on an already empty or whitespace-only existing title deletes the task immediately and focuses a neighbouring task when possible. Leaving an existing task empty also deletes it. These actions bypass the button's confirmation step. Removing the last character alone does not delete the task; it takes another Backspace or leaving the task. An empty unsaved row simply closes, and Escape still discards an existing edit. Failed deletes leave the task available to retry.
+
 ## Task completion
 
 A task is complete when `completedAt` is non-null. The API accepts a timezone-qualified ISO timestamp or `null` to reopen it, and returns timestamps normalized to UTC. The checkbox sends the current time when checked. Title-only updates preserve the completion timestamp.
