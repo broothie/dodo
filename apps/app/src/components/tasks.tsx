@@ -38,6 +38,14 @@ import { api } from "../lib/api";
 import { parseTaskText, preserveLiteralRanges, type TextRange } from "@dodo/shared/natural-language";
 import { groupTasksByDate } from "../lib/task-sections";
 
+function CountChip({ count }: { count: number }) {
+  return (
+    <Paragraph bg="color-2" rounded="full" px="2" py="1" minW={28} text="center" fontSize="sm" lineHeight="sm">
+      {count}
+    </Paragraph>
+  );
+}
+
 function CompletionIcon() {
   const theme = useTheme();
   return <Check size={16} color={getVariableValue(theme.color)} />;
@@ -248,9 +256,7 @@ export default function Tasks() {
             </XStack>
             <XStack items="center" gap="2">
               <H3>Tasks</H3>
-              <Paragraph bg="color-2" rounded="full" px="2" py="1" minW={28} text="center" fontSize="sm" lineHeight="sm">
-                {tasks.length}
-              </Paragraph>
+              <CountChip count={tasks.length} />
             </XStack>
             {!!visibleError && (
               <YStack
@@ -331,9 +337,10 @@ export default function Tasks() {
                 stickySectionHeadersEnabled={false}
                 keyboardShouldPersistTaps="handled"
                 renderSectionHeader={({ section }) => (
-                  <YStack pt="3" pb="1">
+                  <XStack pt="3" pb="1" items="center" gap="2">
                     <H4 fontSize="sm" lineHeight="sm">{section.title}</H4>
-                  </YStack>
+                    <CountChip count={section.data.length} />
+                  </XStack>
                 )}
                 keyExtractor={(task) => task.id}
                 ListEmptyComponent={
