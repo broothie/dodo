@@ -75,6 +75,22 @@ test('cleanup preserves open, forked, shared, reopened and still-building previe
   }
 });
 
+test('cleanup uses the latest check result so superseded Cloudflare checks cannot block it forever', async () => {
+  const run = fixture();
+  let checked = false;
+  const github = async (path: string) => {
+    if (!path.includes('/check-runs?')) return run.github(path);
+    checked = true;
+    const check = { name: 'Workers Builds: dodo', app: { slug: 'cloudflare-workers-and-pages' } };
+    return { check_runs: path.includes('filter=latest')
+      ? [{ ...check, status: 'completed' }]
+      : [{ ...check, status: 'completed' }, { ...check, status: 'in_progress' }] };
+  };
+  assert.equal(await cleanupPullRequest(2, { ...run, github, dryRun: false }), 'deleted');
+  assert.equal(checked, true);
+  assert.equal(run.calls.filter(call => call.method === 'DELETE').length, 2);
+});
+
 test('unexpected preview deletion failures stop database deletion; absent resources are safe to retry', async () => {
   const failed = fixture({ failPreview: true });
   await assert.rejects(cleanupPullRequest(2, { ...failed, dryRun: false }), /Preview API failed/);

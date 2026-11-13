@@ -96,7 +96,9 @@ async function hasActiveBuild(github, pr) {
   const commits = await githubPages(github, `${repositoryPath}/pulls/${pr.number}/commits`);
   for (const sha of new Set([pr.head.sha, ...commits.map(commit => commit.sha)])) {
     if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Unexpected PR commit SHA.');
-    const checks = await githubPages(github, `${repositoryPath}/commits/${sha}/check-runs?filter=all`, 'check_runs');
+    // Cloudflare can leave a superseded check in progress after publishing its
+    // completed result. Only the latest attempt for each check is authoritative.
+    const checks = await githubPages(github, `${repositoryPath}/commits/${sha}/check-runs?filter=latest`, 'check_runs');
     if (checks.some(check => check.app?.slug === 'cloudflare-workers-and-pages' &&
         check.name === 'Workers Builds: dodo' && check.status !== 'completed')) return true;
   }
