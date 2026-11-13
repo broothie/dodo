@@ -1,7 +1,7 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { expo } from "@better-auth/expo";
 import { emailOTP } from "better-auth/plugins";
-import { authEmail, sendAuthEmail } from "./auth-email";
+import { authCodeEmail, sendAuthEmail } from "./auth-email";
 
 // Keep Better Auth's existing schema; only email codes can sign in.
 export const authOptions = {
@@ -54,7 +54,7 @@ export function createAuth(env: Env) {
         async sendVerificationOTP({ email, otp, type }) {
           if (type === "forget-password") return;
           const purpose = type === "sign-in" ? "sign in to Dodo" : "verify your Dodo email";
-          await sendAuthEmail(env, authEmail(email, "Your Dodo code", `Your code to ${purpose} is:\n\n${otp}\n\nThis code expires in 5 minutes. If you didn’t request it, ignore this email.`));
+          await sendAuthEmail(env, authCodeEmail(email, purpose, otp));
         },
       }),
     ],
