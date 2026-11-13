@@ -35,7 +35,7 @@ import {
   type TaskPatch,
 } from "@dodo/shared";
 import { api } from "../lib/api";
-import { parseTaskText } from "@dodo/shared/natural-language";
+import { parseTaskText, preserveLiteralRanges, type TextRange } from "@dodo/shared/natural-language";
 import { groupTasksByDate } from "../lib/task-sections";
 
 function CompletionIcon() {
@@ -51,6 +51,7 @@ export default function Tasks() {
   const newTaskFocused = useRef(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState("");
+  const [newLiteralRanges, setNewLiteralRanges] = useState<TextRange[]>([]);
   const [adding, setAdding] = useState(false);
   const [newDue, setNewDue] = useState<Due>(noDue);
   const [newReference, setNewReference] = useState(() => new Date());
@@ -61,20 +62,22 @@ export default function Tasks() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [editLiteralRanges, setEditLiteralRanges] = useState<TextRange[]>([]);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const editingTask = tasks.find((task) => task.id === editing);
   const newParsed = useMemo(
-    () => parseTaskText(title, { due: newDue, now: newReference }),
-    [title, newDue, newReference],
+    () => parseTaskText(title, { due: newDue, now: newReference, literalRanges: newLiteralRanges }),
+    [title, newDue, newReference, newLiteralRanges],
   );
   const editParsed = useMemo(
     () =>
       parseTaskText(editTitle, {
         due: editingTask ?? noDue,
         now: editReference,
+        literalRanges: editLiteralRanges,
       }),
-    [editTitle, editingTask, editReference],
+    [editTitle, editingTask, editReference, editLiteralRanges],
   );
   const visibleError =
     error || newParsed.error || (editing ? editParsed.error : "");
@@ -185,7 +188,10 @@ export default function Tasks() {
         list.map((task) => (task.id === saved.id ? saved : task)),
       );
       setDueEditor((current) => (current === task.id ? null : current));
-      if (extractedTitle !== null) setEditTitle(extractedTitle);
+      if (extractedTitle !== null) {
+        setEditTitle(extractedTitle);
+        setEditLiteralRanges([{ start: 0, end: extractedTitle.length }]);
+      }
     }, true);
   }
   async function addTask() {
@@ -201,6 +207,7 @@ export default function Tasks() {
         const saved = await api.create({ title: draft.title, ...draft.due });
         setTasks((list) => [saved, ...list]);
         setTitle("");
+        setNewLiteralRanges([]);
         setNewDue(noDue);
         setNewReference(new Date());
         setAdding(newTaskFocused.current);
@@ -213,6 +220,7 @@ export default function Tasks() {
     setError("");
     setEditing(task.id);
     setEditTitle(task.title);
+    setEditLiteralRanges([{ start: 0, end: task.title.length }]);
     setEditReference(new Date());
     setDueEditor(null);
     setDeleting(null);
@@ -287,6 +295,7 @@ export default function Tasks() {
                     maxLength={300}
                     value={title}
                     onChangeText={(text) => {
+                      setNewLiteralRanges(ranges => preserveLiteralRanges(title, text, ranges));
                       setTitle(text);
                       setError("");
                       setAdding(true);
@@ -371,7 +380,12 @@ export default function Tasks() {
                             if (editing !== item.id) beginEditing(item);
                           }}
                           onChangeText={(text) => {
-                            if (editing !== item.id) beginEditing(item);
+                            if (editing !== item.id) {
+                              beginEditing(item);
+                              setEditLiteralRanges(preserveLiteralRanges(item.title, text, [{ start: 0, end: item.title.length }]));
+                            } else {
+                              setEditLiteralRanges(ranges => preserveLiteralRanges(editTitle, text, ranges));
+                            }
                             setEditTitle(text);
                             setError("");
                           }}
@@ -472,7 +486,10 @@ export default function Tasks() {
             busy={busy}
             onClose={() => setDueEditor(null)}
             onSave={async (due) => {
-              if (newParsed.matches.length) setTitle(newParsed.title);
+              if (newParsed.matches.length) {
+                setTitle(newParsed.title);
+                setNewLiteralRanges([{ start: 0, end: newParsed.title.length }]);
+              }
               setNewDue(due);
               setDueEditor(null);
             }}

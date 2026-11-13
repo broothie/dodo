@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseTaskText } from "../packages/shared/src/natural-language.ts";
+import { parseTaskText, preserveLiteralRanges } from "../packages/shared/src/natural-language.ts";
 import { dueFromLocal, noDue } from "../packages/shared/src/scheduling.ts";
 
 const options = {
@@ -66,10 +66,10 @@ test("clock forms choose the next occurrence and respect explicit 24-hour and me
   );
 });
 
-test("rightmost date and rightmost time win independently and all recognized phrases are extracted", () => {
+test("rightmost date and rightmost time win independently and only underlined expressions are extracted", () => {
   const text = "Call today at 1pm tomorrow at 2p";
   const parsed = parseTaskText(text, options);
-  assert.equal(parsed.title, "Call");
+  assert.equal(parsed.title, "Call today at 1pm");
   assert.deepEqual(
     parsed.due,
     dueFromLocal("2026-11-13", "14:00", options.timeZone),
@@ -79,7 +79,7 @@ test("rightmost date and rightmost time win independently and all recognized phr
     parseTaskText("Call tomorrow at 2pm today", options).due,
     dueFromLocal("2026-11-12", "14:00", options.timeZone),
   );
-  assert.equal(parseTaskText("Call today and tomorrow", options).title, "Call");
+  assert.equal(parseTaskText("Call today and tomorrow", options).title, "Call today and");
   assert.equal(
     parseTaskText("Call tomorrow with Sam at 1pm", options).title,
     "Call with Sam",
@@ -157,12 +157,46 @@ test("nonexistent local times report an error, rather than stripping a phrase or
 test("highlight offsets survive emoji and repeated phrases, and an all-date input has no fabricated title", () => {
   const text = "🐕 Walk tomorrow at 1p tomorrow";
   const parsed = parseTaskText(text, options);
-  assert.equal(parsed.title, "🐕 Walk");
+  assert.equal(parsed.title, "🐕 Walk tomorrow");
   assert.equal(
     text.slice(parsed.matches[0].start, parsed.matches[0].end),
     "at 1p tomorrow",
   );
   assert.equal(parseTaskText("tomorrow 1pm", options).title, "");
+});
+
+test("retained dates and times remain literal on reopen and unrelated edits, while edited expressions can schedule again", () => {
+  const original = parseTaskText("Call 1pm tomorrow 2pm", options);
+  assert.equal(original.title, "Call 1pm");
+  const literalRanges = [{ start: 0, end: original.title.length }];
+  const editOptions = { ...options, due: original.due, literalRanges };
+  assert.deepEqual(parseTaskText(original.title, editOptions), { title: original.title, due: original.due, matches: [] });
+
+  let previous = original.title;
+  let ranges = literalRanges;
+  for (const next of ["Please Call 1pm", "Please Call 1pm with Sam", "Please Call 1pm with Sam tomorrow 3pm"]) {
+    ranges = preserveLiteralRanges(previous, next, ranges);
+    const parsed = parseTaskText(next, { ...editOptions, literalRanges: ranges });
+    assert.equal(parsed.title, next.includes("3pm") ? "Please Call 1pm with Sam" : next);
+    assert.deepEqual(parsed.due, next.includes("3pm") ? dueFromLocal("2026-11-13", "15:00", options.timeZone) : original.due);
+    previous = next;
+  }
+  const changed = "Call 4pm";
+  const parsed = parseTaskText(changed, { ...editOptions, literalRanges: preserveLiteralRanges(original.title, changed, literalRanges) });
+  assert.equal(parsed.title, "Call");
+  assert.deepEqual(parsed.due, dueFromLocal("2026-11-13", "16:00", options.timeZone));
+});
+
+test("only accepted occurrences are removed, including repeated phrases and non-adjacent date/time winners", () => {
+  assert.equal(parseTaskText("Call 1pm 2pm", options).title, "Call 1pm");
+  assert.equal(parseTaskText("Call 1pm 1pm", options).title, "Call 1pm");
+  const parsed = parseTaskText("🐕 Walk tomorrow and today at 1pm 2pm", options);
+  assert.equal(parsed.title, "🐕 Walk tomorrow and at 1pm");
+  assert.deepEqual(parsed.due, dueFromLocal("2026-11-12", "14:00", options.timeZone));
+  const text = "Call 1pm 2pm";
+  const trimmed = "Call 1pm";
+  assert.equal(parseTaskText(trimmed, options).matches.length, 1, "unsaved draft expressions can become the winner when a later time is removed");
+  assert.deepEqual(preserveLiteralRanges(text, text, [{ start: 0, end: text.length }]), [{ start: 0, end: text.length }]);
 });
 
 test("only the accepted time and date are underlined, including mixed clock forms and repeated text", () => {

@@ -15,7 +15,32 @@ export type ParsedTaskText = {
   matches: TextRange[];
   error?: string;
 };
-export type ParseTaskOptions = { now?: Date; timeZone?: string; due?: Due };
+export type ParseTaskOptions = {
+  now?: Date;
+  timeZone?: string;
+  due?: Due;
+  /** Previously saved text stays literal until the user edits the expression. */
+  literalRanges?: TextRange[];
+};
+
+export function preserveLiteralRanges(previous: string, next: string, ranges: TextRange[]): TextRange[] {
+  if (previous === next) return ranges;
+  let prefix = 0;
+  while (prefix < Math.min(previous.length, next.length) && previous[prefix] === next[prefix]) prefix++;
+  let suffix = 0;
+  while (suffix < Math.min(previous.length, next.length) - prefix &&
+    previous[previous.length - 1 - suffix] === next[next.length - 1 - suffix]) suffix++;
+  const oldEnd = previous.length - suffix;
+  const shift = next.length - previous.length;
+  return ranges.flatMap(range => {
+    const unchanged: TextRange[] = [];
+    const prefixEnd = Math.min(range.end, prefix);
+    if (range.start < prefixEnd) unchanged.push({ start: range.start, end: prefixEnd });
+    const suffixStart = Math.max(range.start, oldEnd);
+    if (suffixStart < range.end) unchanged.push({ start: suffixStart + shift, end: range.end + shift });
+    return unchanged;
+  });
+}
 
 function mergeRanges(candidates: TextRange[], text: string): TextRange[] {
   const ranges: TextRange[] = [];
@@ -58,7 +83,7 @@ export function parseTaskText(
   );
   const now = instant.toZonedDateTimeISO(timeZone);
   const today = now.toPlainDate();
-  const candidates: Candidate[] = [];
+  let candidates: Candidate[] = [];
   let masked = text;
   const mask = (range: TextRange) => {
     masked =
@@ -161,16 +186,15 @@ export function parseTaskText(
     }
     if (candidate.date || candidate.hours) candidates.push(candidate);
   }
+  candidates = candidates.filter(candidate => !options.literalRanges?.some(range =>
+    candidate.start >= range.start && candidate.end <= range.end));
   candidates.sort((a, b) => a.start - b.start);
   if (!candidates.length) return { title: text.trim(), due: base, matches: [] };
   const dateCandidate = candidates.filter((candidate) => candidate.date).at(-1);
   const timeCandidate = candidates.filter((candidate) => candidate.hours).at(-1);
   const matches = mergeRanges(candidates.filter(candidate => candidate === dateCandidate || candidate === timeCandidate), text);
-  // Continue extracting all scheduling phrases, but underline only the winners.
-  // Retaining overridden phrases would parse them again on the next edit.
-  const extractionRanges = mergeRanges(candidates, text);
   let title = text;
-  for (const match of [...extractionRanges].reverse())
+  for (const match of [...matches].reverse())
     title = title.slice(0, match.start) + " " + title.slice(match.end);
   title = title
     .replace(/\s+/g, " ")
