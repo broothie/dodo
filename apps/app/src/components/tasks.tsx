@@ -38,9 +38,18 @@ import { api } from "../lib/api";
 import { parseTaskText, preserveLiteralRanges, type TextRange } from "@dodo/shared/natural-language";
 import { groupTasksByDate } from "../lib/task-sections";
 
-function CountChip({ count }: { count: number }) {
+function CountChip({ count, small = false }: { count: number; small?: boolean }) {
   return (
-    <Paragraph bg="color-2" rounded="full" px="2" py="1" minW={28} text="center" fontSize="sm" lineHeight="sm">
+    <Paragraph
+      bg="color-2"
+      rounded="full"
+      px={small ? "1.5" : "2"}
+      py={small ? "0.5" : "1"}
+      minW={small ? 20 : 28}
+      text="center"
+      fontSize={small ? "xs" : "sm"}
+      lineHeight={small ? "xs" : "sm"}
+    >
       {count}
     </Paragraph>
   );
@@ -339,7 +348,7 @@ export default function Tasks() {
                 renderSectionHeader={({ section }) => (
                   <XStack pt="3" pb="1" items="center" gap="2">
                     <H4 fontSize="sm" lineHeight="sm">{section.title}</H4>
-                    <CountChip count={section.data.length} />
+                    <CountChip count={section.data.length} small />
                   </XStack>
                 )}
                 keyExtractor={(task) => task.id}
