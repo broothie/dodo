@@ -1,8 +1,7 @@
 import EllipsisVertical from "lucide-react-native/icons/ellipsis-vertical";
 import { Link } from "expo-router";
-import Calendar from "lucide-react-native/icons/calendar";
-import Clock from "lucide-react-native/icons/clock";
 import { DueDialog } from "../components/due-dialog";
+import { DueChip } from "../components/due-chip";
 import { TaskTitleInput } from "../components/task-title-input";
 import {
   OutsideEditProvider,
@@ -31,7 +30,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Head from "expo-router/head";
 import {
   noDue,
-  formatDue,
   type Due,
   type Task,
   type TaskPatch,
@@ -304,19 +302,14 @@ export default function Tasks() {
                 </XStack>
                 {adding && (
                   <XStack pb="2" pl="9">
-                    <Button
-                      size="xs"
-                      rounded="full"
-                      aria-label="Set new task due date"
-                      icon={newParsed.due.dueKind === "datetime" ? Clock : Calendar}
+                    <DueChip
+                      due={newParsed.due}
+                      label="Set new task due date"
+                      editing
                       onPress={() =>
                         setDueEditor(dueEditor === "new" ? null : "new")
                       }
-                    >
-                      {newParsed.due.dueKind === "none"
-                        ? "Add date"
-                        : formatDue(newParsed.due)}
-                    </Button>
+                    />
                   </XStack>
                 )}
               </YStack>
@@ -395,11 +388,11 @@ export default function Tasks() {
                       {editing === item.id && (
                         <YStack gap="2" pb="2" pl="9">
                           <XStack gap="2" flexWrap="wrap">
-                            <Button
-                              size="xs"
-                              rounded="full"
-                              aria-label={`Set due date for ${item.title}`}
-                              icon={editParsed.due.dueKind === "datetime" ? Clock : Calendar}
+                            <DueChip
+                              due={editParsed.due}
+                              label={`Set due date for ${item.title}`}
+                              showDate={false}
+                              editing
                               disabled={busy}
                               onPress={() => {
                                 setDueEditor(
@@ -407,11 +400,7 @@ export default function Tasks() {
                                 );
                                 setDeleting(null);
                               }}
-                            >
-                              {editParsed.due.dueKind === "none"
-                                ? "Add date"
-                                : formatDue(editParsed.due)}
-                            </Button>
+                            />
                             <Button
                               size="xs"
                               rounded="full"
@@ -430,18 +419,15 @@ export default function Tasks() {
                           </XStack>
                         </YStack>
                       )}
-                      {editing !== item.id && item.dueKind !== "none" && (
+                      {editing !== item.id && item.dueKind === "datetime" && (
                         <XStack pb="2" pl="9">
-                          <Button
-                            size="xs"
-                            rounded="full"
-                            aria-label={`Set due date for ${item.title}`}
-                            icon={item.dueKind === "datetime" ? Clock : Calendar}
+                          <DueChip
+                            due={item}
+                            label={`Set due date for ${item.title}`}
+                            showDate={false}
                             disabled={busy}
                             onPress={() => setDueEditor(item.id)}
-                          >
-                            {formatDue(item)}
-                          </Button>
+                          />
                         </XStack>
                       )}
 

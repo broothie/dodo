@@ -113,8 +113,9 @@ function formatTime(date: Date): string {
   return `${hours % 12 || 12}${minutePart}${hours < 12 ? "am" : "pm"}`;
 }
 
-export function formatDue(due: Due, now = new Date()): string {
+export function formatDue(due: Due, now = new Date(), { showDate = true }: { showDate?: boolean } = {}): string {
   if (due.dueKind === "none") return "";
+  if (!showDate) return due.dueKind === "datetime" ? formatTime(new Date(due.dueAt)) : "";
   const calendarDay = (date: Date) =>
     Temporal.PlainDate.from({
       year: date.getFullYear(),

@@ -67,12 +67,14 @@ test("clock forms choose the next occurrence and respect explicit 24-hour and me
 });
 
 test("rightmost date and rightmost time win independently and all recognized phrases are extracted", () => {
-  const parsed = parseTaskText("Call today at 1pm tomorrow at 2p", options);
+  const text = "Call today at 1pm tomorrow at 2p";
+  const parsed = parseTaskText(text, options);
   assert.equal(parsed.title, "Call");
   assert.deepEqual(
     parsed.due,
     dueFromLocal("2026-11-13", "14:00", options.timeZone),
   );
+  assert.deepEqual(parsed.matches.map(match => text.slice(match.start, match.end)), ["tomorrow at 2p"]);
   assert.deepEqual(
     parseTaskText("Call tomorrow at 2pm today", options).due,
     dueFromLocal("2026-11-12", "14:00", options.timeZone),
@@ -158,7 +160,24 @@ test("highlight offsets survive emoji and repeated phrases, and an all-date inpu
   assert.equal(parsed.title, "🐕 Walk");
   assert.equal(
     text.slice(parsed.matches[0].start, parsed.matches[0].end),
-    "tomorrow at 1p tomorrow",
+    "at 1p tomorrow",
   );
   assert.equal(parseTaskText("tomorrow 1pm", options).title, "");
+});
+
+test("only the accepted time and date are underlined, including mixed clock forms and repeated text", () => {
+  for (const [text, expected] of [
+    ["Call 1pm 2pm", ["2pm"]],
+    ["Call 1pm or 2pm", ["2pm"]],
+    ["Call 1pm 13:00 at 2p", ["at 2p"]],
+    ["Call 1pm 1pm", ["1pm"]],
+    ["Call tomorrow at noon at 2pm", ["tomorrow", "at 2pm"]],
+    ["Call at 2pm at midnight", ["at midnight"]],
+    ["Call tomorrow at 2pm today", ["at 2pm today"]],
+    ["🐕 Walk tomorrow and today at 1pm 2pm", ["today", "2pm"]],
+  ] as const) {
+    const parsed = parseTaskText(text, options);
+    assert.deepEqual(parsed.matches.map(match => text.slice(match.start, match.end)), expected, text);
+    if (text === "Call 1pm 1pm") assert.equal(parsed.matches[0].start, text.lastIndexOf("1pm"));
+  }
 });

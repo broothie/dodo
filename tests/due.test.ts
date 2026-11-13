@@ -107,3 +107,21 @@ test("relative deadlines follow the display timezone and calendar days across DS
     else process.env.TZ = oldZone;
   }
 });
+
+test("time-only chips omit dates on every day and preserve compact local clock formatting", () => {
+  const previousZone = process.env.TZ;
+  try {
+    process.env.TZ = "America/Los_Angeles";
+    const now = new Date("2026-11-13T20:00:00Z");
+    const timed = (dueAt: string) => parseDue({ dueKind: "datetime", dueAt, timeZone: "Asia/Tokyo" });
+    assert.equal(formatDue(timed("2026-11-14T21:00:00Z"), now, { showDate: false }), "1pm");
+    assert.equal(formatDue(timed("2027-01-01T21:30:00Z"), now, { showDate: false }), "1:30pm");
+    assert.equal(formatDue(timed("2026-11-12T08:00:00Z"), now, { showDate: false }), "12am");
+    assert.equal(formatDue(parseDue({ dueKind: "date", dueAt: "2026-11-14" }), now, { showDate: false }), "");
+    assert.equal(formatDue(noDue, now, { showDate: false }), "");
+    assert.equal(formatDue(timed("2026-11-14T21:00:00Z"), now, { showDate: true }), "Tomorrow, 1pm");
+  } finally {
+    if (previousZone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousZone;
+  }
+});
