@@ -1,34 +1,7 @@
 import { createAuth, trustedOrigins } from "./auth";
-import { parseTaskInput, parseDue, type Task } from "@dodo/shared";
-
-type Row = {
-  id: string;
-  title: string;
-  completed_at: string | null;
-  deleted_at: string | null;
-  due_kind: string;
-  due_at: string | null;
-  time_zone: string | null;
-  created_at: string;
-  updated_at: string;
-};
-const columns =
-  "id, title, completed_at, deleted_at, due_kind, due_at, time_zone, created_at, updated_at";
-function task(row: Row): Task {
-  return {
-    ...parseDue({
-      dueKind: row.due_kind,
-      dueAt: row.due_at,
-      timeZone: row.time_zone,
-    }),
-    id: row.id,
-    title: row.title,
-    completedAt: row.completed_at,
-    deletedAt: row.deleted_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  };
-}
+import { parseTaskInput } from "@dodo/shared";
+import { taskColumns as columns, taskFromRow as task, type TaskRow as Row } from "./task-record";
+import { taskSync } from "./task-sync";
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 
@@ -79,12 +52,21 @@ const app = {
       if (
         url.pathname !== "/api/tasks" &&
         url.pathname !== "/api/tasks/claim" &&
+        url.pathname !== "/api/sync/pull" &&
+        url.pathname !== "/api/sync/push" &&
         !/^\/api\/tasks\/[a-f0-9-]{36}(?:\/restore)?$/.test(url.pathname)
       )
         return json({ error: "Not found." }, 404);
       const session = await auth.api.getSession({ headers: request.headers });
       if (!session) return json({ error: "Sign in to access your tasks." }, 401);
       const owner = `user:${session.user.id}`;
+      if (url.pathname.startsWith("/api/sync/")) {
+        // A tab may still have another account's local database open after
+        // cookies change in a second tab. Never replay that account's outbox.
+        if (request.headers.get("X-Dodo-Account") !== session.user.id)
+          return json({ error: "Account changed. Sign in again to sync." }, 403);
+        return await taskSync(request, env.DB, owner);
+      }
       if (url.pathname === "/api/tasks/claim") {
         if (request.method !== "POST")
           return json({ error: "Method not allowed." }, 405);
@@ -251,7 +233,7 @@ export default {
       "Access-Control-Allow-Methods",
       "GET, POST, PATCH, DELETE, OPTIONS",
     );
-    headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Dodo-Magic-Link");
+    headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Dodo-Magic-Link, X-Dodo-Account");
     headers.set("Access-Control-Allow-Credentials", "true");
     headers.set("Vary", "Origin");
     return new Response(response.body, { status: response.status, headers });

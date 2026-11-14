@@ -13,7 +13,7 @@ export async function emailCode(context: BrowserContext, email: string) {
 
 export const test = base.extend<{
   email: string;
-  account: { create: (input: TaskInput) => Promise<Task>; list: () => Promise<Task[]> };
+  account: { id: string; create: (input: TaskInput) => Promise<Task>; list: () => Promise<Task[]> };
 }>({
   email: async ({ context }, use) => {
     // Avoid coupling independent tests through the real auth rate limiter.
@@ -29,7 +29,9 @@ export const test = base.extend<{
       headers: { Origin: origin }, data: { email, otp: await emailCode(context, email) },
     });
     expect(signedIn.ok()).toBeTruthy();
+    const { user } = await signedIn.json();
     await use({
+      id: user.id,
       async create(input) {
         const response = await context.request.post("/api/tasks", { headers: { Origin: origin }, data: input });
         expect(response.status()).toBe(201);

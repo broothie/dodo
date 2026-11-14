@@ -6,7 +6,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./scheduling": "./src/scheduling.ts",
-    "./natural-language": "./src/natural-language.ts"
+    "./natural-language": "./src/natural-language.ts",
+    "./sync": "./src/sync.ts",
+    "./task-conflicts": "./src/task-conflicts.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"

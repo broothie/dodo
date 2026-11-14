@@ -26,7 +26,7 @@ For native development, use `npm run dev:app` and set `EXPO_PUBLIC_API_URL` to y
 - `packages/shared`: task model, request validation, and a fetch-based API client.
 - `apps/app/src/components`: task screen layout, task rows/composer, shared controls, auth, and settings. Platform-specific controls use `.web.tsx` siblings.
 - `apps/app/src/hooks/use-task-controller.ts`: task loading/mutations, editing drafts, Undo, and keyboard focus coordination.
-- `apps/app/src/lib`: non-visual task edit decisions, grouping, keyboard guards, and platform integrations.
+- `apps/app/src/lib`: non-visual task edit decisions, grouping, keyboard guards, RxDB storage/replication, and platform integrations.
 - `tests`: unit tests and API integration smoke tests; `tests/e2e` contains Playwright browser regressions.
 
 The app supports task creation by pressing Enter, inline title editing, completion, and immediate deletion with Undo. Tasks are grouped by date, with completed tasks below incomplete tasks. It starts empty and stores real data in D1.
@@ -51,7 +51,21 @@ Local `npm run dev` captures messages in memory at `http://localhost:8787/__dev/
 
 ## PWA
 
-Production web exports include an app manifest, generated 192px/512px icons, and a Workbox service worker. The app shell works offline after an initial online visit. Task data is never cached by the service worker and mutations require a connection; offline sync is not implemented. Install from your browser's app menu (HTTPS required). Localhost caching is disabled for development.
+Production web exports include an app manifest, generated 192px/512px icons, and a Workbox service worker. The app shell works offline after an initial online visit. Task API responses are never cached by the service worker; tasks are persisted separately in an account-scoped RxDB database. Install from your browser's app menu (HTTPS required). Localhost app-shell caching is disabled for development.
+
+## Offline tasks and replication
+
+The PWA uses RxDB 17 with the free Dexie/IndexedDB adapter. Create, edit, complete, delete, and Undo save locally before returning to the UI, including offline. RxDB's replication metadata retains pending writes across reloads. The Worker remains the authenticated gateway to D1; `/api/sync/pull` returns documents and a sequence checkpoint, while `/api/sync/push` applies client-generated IDs/revisions using atomic compare-and-swap writes. Repeating a completed write is safe. Responses contain no account ownership fields.
+
+D1 migration `0007_task_replication.sql` backfills revisions and adds a monotonic change sequence. Triggers track legacy REST writes, workspace imports, deletion, and Undo independently of task timestamps. Deleted documents remain in the sync feed as tombstones. The original CRUD endpoints remain compatible. Apply local migrations with `npm run db:migrate`; deployment applies remote migrations through the existing deployment script.
+
+Separate field edits merge; due kind/date/timezone are one field group. Concurrent changes to the same group keep the server version. Deletions win conflicts, so stale offline edits cannot resurrect deleted tasks. An explicit Undo restores a task using its latest local revision. There is no history UI for discarded conflicting values, and tombstones are not purged.
+
+One browser tab leads replication; other tabs share local data. Sync continues while Settings is open, polls every ten seconds, and retries on reconnect or visibility changes. It requires the app to remain open; closed-app background uploads are not implemented. The UI indicates offline storage, active sync, or a paused sync. Requests include an account ID assertion checked against the authenticated session, preventing an old tab from replaying data under a different account's cookies.
+
+A previously signed-in account can reopen its local task database offline. Only account display information is remembered locally, not session cookies or tokens. Signing in initially and renewing an expired session require a connection. Sign-out clears the active-account marker and stops that account's sync; its database and unsent changes remain on the device for the next sign-in to the same account. Browser storage clearing/eviction removes unsynced local data.
+
+Native screens use the same `TaskStore` interface with the existing online API adapter. Durable native RxDB storage is not enabled: RxDB's Expo/SQLite storage plugins require a separate licensing/adapter choice. No paid or trial plugin is included.
 
 ## Checks
 
@@ -72,9 +86,9 @@ node --experimental-strip-types tests/api-smoke.mts
 node --experimental-strip-types tests/passwordless-smoke.mts
 ```
 
-Playwright starts a separate loopback server on port 8790 with a real local Worker, fresh D1 migrations in a temporary directory, test-only auth secrets, and captured emails. Each test uses its own account. It does not use your development database, credentials, or Resend. Temporary databases and mail are discarded when the server stops. Ports 8790 and 8792 must be free; normal development on 8787 can stay running. Tests cover Enter/focus, deadline inheritance and extraction, autosave, deletion/Undo, due-dialog cancellation/clearing, save failures, anonymous-session revalidation, appearance persistence, and sign-out. Service workers are blocked in this suite to isolate application behavior.
+Playwright starts a separate loopback server on port 8790 with a real local Worker, fresh D1 migrations in a temporary directory, test-only auth secrets, and captured emails. Each test uses its own account. It does not use your development database, credentials, or Resend. Temporary databases and mail are discarded when the server stops. Ports 8790 and 8792 must be free; normal development on 8787 can stay running. Tests cover Enter/focus, deadline inheritance and extraction, autosave, deletion/Undo, due-dialog cancellation/clearing, server outages, anonymous-session revalidation, appearance persistence, and sign-out. Offline tests additionally exercise the production service worker, offline reloads, reconnect, two-client conflicts, account isolation, and tab leadership handoff. Other browser tests block service workers.
 
-The `Checks` GitHub Actions workflow runs typechecking (including browser tests), lint, unit tests, the production web build, and Playwright on pull requests and pushes to main. These are separate from Cloudflare's deployment checks. `test:coverage` reports V8 coverage for modules exercised by unit tests; its percentage is not whole-app coverage. Native devices, Safari, and service-worker/offline lifecycle behavior still require separate coverage.
+The `Checks` GitHub Actions workflow runs typechecking (including browser tests), lint, unit tests, the production web build, and Playwright on pull requests and pushes to main. These are separate from Cloudflare's deployment checks. `test:coverage` reports V8 coverage for modules exercised by unit tests; its percentage is not whole-app coverage. Native devices, Safari, and long-running upgrade/storage-eviction behavior still require separate coverage.
 
 ## Cloudflare deployment
 

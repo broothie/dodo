@@ -15,9 +15,17 @@ function newestFirst(a: Task, b: Task): number {
 }
 
 export function insertTaskAfter(tasks: readonly Task[], task: Task, afterId: string | null): Task[] {
-  const index = afterId ? tasks.findIndex(item => item.id === afterId) : -1;
-  if (index < 0) return [task, ...tasks];
-  return [...tasks.slice(0, index + 1), task, ...tasks.slice(index + 1)];
+  const list = tasks.filter(item => item.id !== task.id);
+  const index = afterId ? list.findIndex(item => item.id === afterId) : -1;
+  if (index < 0) return [task, ...list];
+  return [...list.slice(0, index + 1), task, ...list.slice(index + 1)];
+}
+
+export function reconcileTaskOrder(current: readonly Task[], incoming: readonly Task[]): Task[] {
+  const byId = new Map(incoming.map(task => [task.id, task]));
+  const kept = current.flatMap(task => { const next = byId.get(task.id); byId.delete(task.id); return next ? [next] : []; });
+  const added = [...byId.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+  return [...added, ...kept];
 }
 
 export function groupTasksByDate(tasks: readonly Task[], now = new Date()): TaskSection[] {

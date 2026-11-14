@@ -9,6 +9,7 @@ import { authClient } from "../lib/auth-client";
 import type { AccountUser } from "./auth-gate";
 import { useAppearance, type AppearancePreference } from "./appearance-provider";
 import { Logo } from "./brand";
+import { clearRememberedAccount } from "../lib/account-cache";
 
 const appearanceOptions: { value: AppearancePreference; label: string }[] = [
   { value: "device", label: "Device" },
@@ -28,6 +29,7 @@ export function Settings({ user }: { user: AccountUser }) {
     try {
       const result = await authClient.signOut();
       if (result.error) throw new Error(result.error.message || "Could not sign out.");
+      clearRememberedAccount();
       router.replace("/");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign out.");

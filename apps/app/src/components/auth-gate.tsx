@@ -6,34 +6,36 @@ import { importBrowserTasks } from "../lib/api";
 import Tasks from "./tasks";
 import { AccountForm } from "./account-form";
 import { Brand } from "./brand";
+import { useCurrentAccount } from "../hooks/use-current-account";
+import { clearRememberedAccount } from "../lib/account-cache";
 
 export type AccountUser = typeof authClient.$Infer.Session.user;
 
 export function AuthGate({ children }: { children?: (user: AccountUser) => ReactNode }) {
   const theme = useTheme();
-  const session = authClient.useSession();
+  const { session, user, online } = useCurrentAccount();
   const [hasResolvedSession, setHasResolvedSession] = useState(false);
   const [readyFor, setReadyFor] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
-  const user = session.data?.user;
   const userId = user?.id;
   const sessionResolved = !session.isPending && !session.error;
   if (sessionResolved && !hasResolvedSession) setHasResolvedSession(true);
   useEffect(() => {
     let active = true;
-    if (userId) importBrowserTasks().then(() => {
+    if (userId) (online ? importBrowserTasks() : Promise.resolve()).then(() => {
       if (active) { setReadyFor(userId); setError(""); }
     }, (error: Error) => { if (active) setError(error.message); });
     return () => { active = false; };
-  }, [userId, retry]);
+  }, [userId, retry, online]);
   async function signOut() {
     setSigningOut(true);
     setError("");
     try {
       const result = await authClient.signOut();
       if (result.error) throw new Error(result.error.message || "Could not sign out.");
+      clearRememberedAccount();
     } catch (error) {
       setError(error instanceof Error ? error.message : "Could not sign out.");
     } finally { setSigningOut(false); }

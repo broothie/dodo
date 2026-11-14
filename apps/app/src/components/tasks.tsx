@@ -13,6 +13,7 @@ import { DueDialog } from "./due-dialog";
 import { TaskComposer } from "./task-composer";
 import { OutsideEditProvider } from "./task-edit-boundary";
 import { TaskRow } from "./task-row";
+import { SyncActivity } from "./sync-activity";
 
 export default function Tasks({ userId }: { userId: string }) {
   const insets = useSafeAreaInsets();
@@ -27,7 +28,10 @@ export default function Tasks({ userId }: { userId: string }) {
           <Head><title>Dodo</title></Head>
           <YStack flex={1} w="100%" maxW={900} self="center" px="6" py="4" gap="4">
             <XStack items="center" justify="space-between" gap="3">
-              <Brand />
+              <XStack items="center" gap="2">
+                <Brand />
+                <SyncActivity active={controller.syncStatus.online && controller.syncStatus.active && !controller.syncStatus.error} />
+              </XStack>
               <Link href="/settings" asChild>
                 <Button size="sm" circular variant="outlined" borderWidth={0} icon={EllipsisVertical} aria-label="Settings" />
               </Link>
@@ -36,6 +40,11 @@ export default function Tasks({ userId }: { userId: string }) {
               <H3>Tasks</H3>
               <CountChip count={controller.tasks.length} />
             </XStack>
+            {(!controller.syncStatus.online || !!controller.syncStatus.error) && (
+              <Paragraph size="xs" role="status" aria-label="Task sync status">
+                {!controller.syncStatus.online ? "Offline · changes saved on this device" : controller.syncStatus.error}
+              </Paragraph>
+            )}
             {!!controller.visibleError && (
               <YStack theme="red" bg="background" p="3" rounded="md" gap="3" role="alert">
                 <Paragraph>{controller.visibleError}</Paragraph>
@@ -58,7 +67,7 @@ export default function Tasks({ userId }: { userId: string }) {
                 keyExtractor={task => task.id}
                 ListEmptyComponent={
                   <YStack py="6">
-                    <Paragraph>{controller.offline ? "Tasks unavailable offline" : "No tasks"}</Paragraph>
+                    <Paragraph>No tasks</Paragraph>
                   </YStack>
                 }
                 renderItem={({ item }) => (
@@ -82,7 +91,7 @@ export default function Tasks({ userId }: { userId: string }) {
             theme="accent"
             icon={Plus}
             aria-label="Create task"
-            disabled={controller.loading || controller.offline || controller.busy}
+            disabled={controller.loading || controller.busy}
             onPress={controller.beginAdding}
             shadowColor="shadow-color"
             shadowOffset={{ width: 0, height: 4 }}

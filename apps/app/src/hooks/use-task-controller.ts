@@ -2,14 +2,22 @@ import { createRef, useEffect, useMemo, useRef, useState, type ComponentRef, typ
 import { Input, toast } from "tamagui";
 import { noDue, type Due, type Task, type TaskPatch } from "@dodo/shared";
 import { parseTaskText, preserveLiteralRanges, type TextRange } from "@dodo/shared/natural-language";
-import { api } from "../lib/api";
-import { groupTasksByDate, insertTaskAfter } from "../lib/task-sections";
+import { openTaskStore } from "../lib/task-store";
+import type { TaskStore, SyncStatus } from "../lib/task-store.types";
+import { groupTasksByDate, insertTaskAfter, reconcileTaskOrder } from "../lib/task-sections";
 import { planTaskEdit } from "../lib/task-edits";
 import type { TaskComposerProps } from "../components/task-composer";
 import type { TaskRowProps } from "../components/task-row";
 
 // Owns task persistence, drafts, and keyboard focus; rendering stays in components.
 export function useTaskController(userId: string) {
+  const storeRef = useRef<TaskStore | null>(null);
+  const api = {
+    create: (input: Parameters<TaskStore["create"]>[0]) => storeRef.current!.create(input),
+    update: (id: string, patch: TaskPatch) => storeRef.current!.update(id, patch),
+    remove: (id: string) => storeRef.current!.remove(id),
+    restore: (id: string) => storeRef.current!.restore(id),
+  };
   const mutationQueue = useRef(Promise.resolve());
   const savingTitles = useRef(new Set<string>());
   const removingTasks = useRef(new Set<string>());
@@ -34,7 +42,7 @@ export function useTaskController(userId: string) {
   const [editing, setEditing] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editLiteralRanges, setEditLiteralRanges] = useState<TextRange[]>([]);
-  const [offline, setOffline] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ online: true, active: false, error: "" });
   const editingTask = tasks.find((task) => task.id === editing);
   const newParsed = useMemo(
     () => parseTaskText(title, { due: newDue, now: newReference, literalRanges: newLiteralRanges }),
@@ -53,41 +61,34 @@ export function useTaskController(userId: string) {
     error || (adding ? newParsed.error : "") || (editing ? editParsed.error : "");
   const load = async () => {
     try {
-      setTasks(await api.list());
+      const store = storeRef.current;
+      if (!store) return;
+      const tasks = await store.list();
+      setTasks(list => reconcileTaskOrder(list, tasks));
+      store.resync();
       setError("");
-      setOffline(false);
-    } catch {
-      setOffline(true);
-      setError(
-        "We couldn’t load your tasks. Check your connection and try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not open local tasks.");
+    } finally { setLoading(false); }
   };
   useEffect(() => {
     let active = true;
-    api.list().then(
-      (list) => {
-        if (active) {
-          setTasks(list);
-          setLoading(false);
-        }
-      },
-      () => {
-        if (active) {
-          setOffline(true);
-          setError(
-            "We couldn’t load your tasks. Check your connection and try again.",
-          );
-          setLoading(false);
-        }
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, []);
+    let dispose = () => {};
+    openTaskStore(userId).then(async store => {
+      if (!active) { store.release(); return; }
+      storeRef.current = store;
+      const stopTasks = store.subscribe(incoming => {
+        if (active) setTasks(list => reconcileTaskOrder(list, incoming));
+      });
+      const stopStatus = store.subscribeStatus(status => { if (active) setSyncStatus(status); });
+      dispose = () => { stopTasks(); stopStatus(); store.release(); };
+      const incoming = await store.list();
+      if (active) { setTasks(list => reconcileTaskOrder(list, incoming)); setLoading(false); }
+    }).catch(error => {
+      if (active) { setError(error instanceof Error ? error.message : "Could not open local tasks."); setLoading(false); }
+    });
+    return () => { active = false; dispose(); };
+  }, [userId]);
   function mutate(
     action: () => Promise<void>,
     propagateError = false,
@@ -97,7 +98,6 @@ export function useTaskController(userId: string) {
       setError("");
       try {
         await action();
-        setOffline(false);
       } catch (error) {
         setError(
           error instanceof Error
@@ -165,9 +165,7 @@ export function useTaskController(userId: string) {
     restoringTasks.current.add(task.id);
     try {
       const restored = await api.restore(task.id);
-      setTasks(list => list.some(item => item.id === restored.id)
-        ? list.map(item => item.id === restored.id ? restored : item)
-        : insertTaskAfter(list, restored, previousId));
+      setTasks(list => insertTaskAfter(list, restored, previousId));
       toast.success("Task restored", { toasterId: userId });
     } catch {
       toast.error("Could not restore task", {
@@ -226,7 +224,7 @@ export function useTaskController(userId: string) {
     }, true);
   }
   async function addTask() {
-    if (creatingTask.current || busy || loading || offline || !title.trim()) return;
+    if (creatingTask.current || busy || loading || !storeRef.current || !title.trim()) return;
     if (newParsed.error || !newParsed.title) {
       setError(newParsed.error || "Add a task title as well as a deadline.");
       return;
@@ -345,7 +343,7 @@ export function useTaskController(userId: string) {
   }
 
   return {
-    tasks, loading, busy, offline, visibleError, adding, composer, dueDialog, row,
+    tasks, loading, busy, syncStatus, visibleError, adding, composer, dueDialog, row,
     sections: groupTasksByDate(tasks),
     composerAnchor: tasks.some(task => task.id === newAfter) ? newAfter : null,
     beginAdding,

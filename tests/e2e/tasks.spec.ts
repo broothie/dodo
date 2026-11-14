@@ -12,6 +12,7 @@ test("FAB creates a parsed task and Enter keeps the composer focused", async ({ 
   await expect(composer).toBeFocused();
   await expect(composer).toHaveValue("");
   await expect(page.getByRole("heading", { name: "Tomorrow", exact: true })).toBeVisible();
+  await expect.poll(async () => (await account.list()).length).toBe(1);
   const [saved] = await account.list();
   expect(saved.title).toBe("Call at 9am");
   expect(saved.dueKind).toBe("datetime");
@@ -30,6 +31,7 @@ test("Enter saves an existing task and creates the next row with its deadline", 
   await composer.fill("Child");
   await composer.press("Enter");
   await expect(page.getByRole("textbox", { name: "Task title: Child", exact: true })).toBeVisible();
+  await expect.poll(async () => (await account.list()).map(task => task.title).sort()).toEqual(["Child", "Renamed parent"]);
   const tasks = await account.list();
   expect(tasks.find(task => task.id === parent.id)?.title).toBe("Renamed parent");
   expect(tasks.find(task => task.title === "Child")).toMatchObject({ dueKind: parent.dueKind, dueAt: parent.dueAt, timeZone: parent.timeZone });
@@ -55,6 +57,7 @@ test("outside clicks save edits; empty blur and Backspace delete with Undo", asy
   await expect(title).toHaveCount(0);
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(title).toHaveValue("Saved outside");
+  await expect.poll(async () => (await account.list()).map(task => task.title)).toEqual(["Saved outside"]);
   expect((await account.list())[0].id).toBe(original.id);
 });
 
@@ -63,13 +66,14 @@ test("Delete needs no confirmation and Undo restores exact completed task metada
   await page.goto("/");
   await page.getByRole("checkbox", { name: "Complete Restore me", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Complete Restore me", exact: true })).toBeChecked();
+  await expect.poll(async () => (await account.list())[0].completedAt).not.toBeNull();
   const [completed] = await account.list();
   await page.getByRole("textbox", { name: "Task title: Restore me", exact: true }).click();
   await page.getByRole("button", { name: "Delete Restore me", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Task title: Restore me", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "Complete Restore me", exact: true })).toBeChecked();
-  expect(await account.list()).toEqual([completed]);
+  await expect.poll(() => account.list()).toEqual([completed]);
   expect(completed.id).toBe(original.id);
 });
 
@@ -86,26 +90,20 @@ test("date modal cancels on outside click and Clear removes the deadline", async
   await page.getByRole("button", { name: "Set due date for Date modal", exact: true }).click();
   await dialog.getByRole("button", { name: "Clear", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  expect((await account.list())[0]).toMatchObject({ dueKind: "none", dueAt: null, timeZone: null });
+  await expect.poll(async () => (await account.list())[0]).toMatchObject({ dueKind: "none", dueAt: null, timeZone: null });
 });
 
-test("a failed save keeps the draft and does not create the next row until retry succeeds", async ({ page, account }) => {
+test("a server outage keeps the local edit durable and retries sync later", async ({ page, account }) => {
   await account.create({ title: "Retry edit" });
   await page.goto("/");
-  await page.route("**/api/tasks/*", async route => {
-    if (route.request().method() === "PATCH")
-      await route.fulfill({ status: 503, json: { error: "Temporary save failure" } });
-    else await route.continue();
-  });
+  await page.route("**/api/sync/push", route => route.fulfill({ status: 503, json: { error: "Temporary save failure" } }));
   const title = page.getByRole("textbox", { name: "Task title: Retry edit", exact: true });
   await title.fill("Retried successfully");
   await title.press("Enter");
-  await expect(page.getByRole("alert")).toContainText("Temporary save failure");
-  await expect(title).toHaveValue("Retried successfully");
-  await expect(page.getByRole("textbox", { name: "New task", exact: true })).toHaveCount(0);
-  expect((await account.list())[0].title).toBe("Retry edit");
-  await page.unroute("**/api/tasks/*");
-  await title.press("Enter");
+  await expect(page.getByRole("textbox", { name: "Task title: Retried successfully", exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "New task", exact: true })).toBeFocused();
-  expect((await account.list())[0].title).toBe("Retried successfully");
+  await expect(page.getByRole("status", { name: "Task sync status" })).toContainText("Sync paused");
+  expect((await account.list())[0].title).toBe("Retry edit");
+  await page.unroute("**/api/sync/push");
+  await expect.poll(async () => (await account.list())[0].title, { timeout: 15000 }).toBe("Retried successfully");
 });
