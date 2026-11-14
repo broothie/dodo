@@ -153,7 +153,6 @@ export function useTaskController(userId: string) {
         }
         toast("Task deleted", {
           toasterId: userId,
-          description: task.title,
           duration: 8000,
           action: { label: "Undo", onClick: () => void restoreTask(task, previousId) },
         });
