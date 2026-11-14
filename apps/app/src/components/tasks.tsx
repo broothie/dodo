@@ -1,400 +1,30 @@
 import EllipsisVertical from "lucide-react-native/icons/ellipsis-vertical";
-import { Link } from "expo-router";
-import { DueDialog } from "../components/due-dialog";
-import { DueChip } from "../components/due-chip";
-import { Brand } from "./brand";
-import { TaskTitleInput } from "../components/task-title-input";
-import {
-  OutsideEditProvider,
-  TaskEditBoundary,
-} from "../components/task-edit-boundary";
-import {
-  Button,
-  Checkbox,
-  H3,
-  H4,
-  Input,
-  Paragraph,
-  Spinner,
-  XStack,
-  YStack,
-  useTheme,
-  getVariableValue,
-  toast,
-} from "tamagui";
-import Check from "lucide-react-native/icons/check";
-import RotateCw from "lucide-react-native/icons/rotate-cw";
-import Trash2 from "lucide-react-native/icons/trash-2";
 import Plus from "lucide-react-native/icons/plus";
-import { createRef, useEffect, useMemo, useRef, useState, type ComponentRef, type RefObject } from "react";
+import RotateCw from "lucide-react-native/icons/rotate-cw";
+import { Link } from "expo-router";
+import Head from "expo-router/head";
 import { SectionList } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Head from "expo-router/head";
-import {
-  noDue,
-  type Due,
-  type Task,
-  type TaskPatch,
-} from "@dodo/shared";
-import { api } from "../lib/api";
-import { parseTaskText, preserveLiteralRanges, type TextRange } from "@dodo/shared/natural-language";
-import { groupTasksByDate, insertTaskAfter } from "../lib/task-sections";
-
-function CountChip({ count, small = false }: { count: number; small?: boolean }) {
-  return (
-    <Paragraph
-      bg="color-2"
-      rounded="full"
-      px={small ? "1.5" : "2"}
-      py={small ? "0.5" : "1"}
-      minW={small ? 20 : 28}
-      text="center"
-      fontSize={small ? "xs" : "sm"}
-      lineHeight={small ? "xs" : "sm"}
-    >
-      {count}
-    </Paragraph>
-  );
-}
-
-function CompletionIcon() {
-  const theme = useTheme();
-  return <Check size={16} color={getVariableValue(theme.color)} />;
-}
+import { Button, H3, H4, Paragraph, Spinner, XStack, YStack } from "tamagui";
+import { useTaskController } from "../hooks/use-task-controller";
+import { Brand } from "./brand";
+import { CountChip } from "./count-chip";
+import { DueDialog } from "./due-dialog";
+import { TaskComposer } from "./task-composer";
+import { OutsideEditProvider } from "./task-edit-boundary";
+import { TaskRow } from "./task-row";
 
 export default function Tasks({ userId }: { userId: string }) {
   const insets = useSafeAreaInsets();
-  const mutationQueue = useRef(Promise.resolve());
-  const savingTitles = useRef(new Set<string>());
-  const removingTasks = useRef(new Set<string>());
-  const restoringTasks = useRef(new Set<string>());
-  const taskInputs = useRef(new Map<string, RefObject<ComponentRef<typeof Input> | null>>());
-  const focusedTask = useRef<string | null>(null);
-  const newTaskInput = useRef<ComponentRef<typeof Input>>(null);
-  const creatingTask = useRef(false);
-  const newTaskFocused = useRef(false);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [title, setTitle] = useState("");
-  const [newLiteralRanges, setNewLiteralRanges] = useState<TextRange[]>([]);
-  const [adding, setAdding] = useState(false);
-  const [newAfter, setNewAfter] = useState<string | null>(null);
-  const [newDue, setNewDue] = useState<Due>(noDue);
-  const [newReference, setNewReference] = useState(() => new Date());
-  const [editReference, setEditReference] = useState(() => new Date());
-  const [dueEditor, setDueEditor] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editLiteralRanges, setEditLiteralRanges] = useState<TextRange[]>([]);
-  const [offline, setOffline] = useState(false);
-  const editingTask = tasks.find((task) => task.id === editing);
-  const newParsed = useMemo(
-    () => parseTaskText(title, { due: newDue, now: newReference, literalRanges: newLiteralRanges }),
-    [title, newDue, newReference, newLiteralRanges],
-  );
-  const editParsed = useMemo(
-    () =>
-      parseTaskText(editTitle, {
-        due: editingTask ?? noDue,
-        now: editReference,
-        literalRanges: editLiteralRanges,
-      }),
-    [editTitle, editingTask, editReference, editLiteralRanges],
-  );
-  const visibleError =
-    error || (adding ? newParsed.error : "") || (editing ? editParsed.error : "");
-  const load = async () => {
-    try {
-      setTasks(await api.list());
-      setError("");
-      setOffline(false);
-    } catch {
-      setOffline(true);
-      setError(
-        "We couldn’t load your tasks. Check your connection and try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => {
-    let active = true;
-    api.list().then(
-      (list) => {
-        if (active) {
-          setTasks(list);
-          setLoading(false);
-        }
-      },
-      () => {
-        if (active) {
-          setOffline(true);
-          setError(
-            "We couldn’t load your tasks. Check your connection and try again.",
-          );
-          setLoading(false);
-        }
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, []);
-  function mutate(
-    action: () => Promise<void>,
-    propagateError = false,
-  ): Promise<void> {
-    const pending = mutationQueue.current.then(async () => {
-      setBusy(true);
-      setError("");
-      try {
-        await action();
-        setOffline(false);
-      } catch (error) {
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Something went wrong. Please try again.",
-        );
-        if (propagateError) throw error;
-      } finally {
-        setBusy(false);
-      }
-    });
-    mutationQueue.current = pending.catch(() => {});
-    return pending;
-  }
-  async function update(task: Task, patch: TaskPatch) {
-    let result: Task | undefined;
-    await mutate(async () => {
-      const saved = await api.update(task.id, patch);
-      result = saved;
-      setTasks((list) =>
-        list.map((task) => (task.id === saved.id ? saved : task)),
-      );
-      setEditing((current) => (current === task.id ? null : current));
-    });
-    return result;
-  }
-  function taskInputRef(id: string) {
-    let ref = taskInputs.current.get(id);
-    if (!ref) {
-      ref = createRef<ComponentRef<typeof Input>>();
-      taskInputs.current.set(id, ref);
-    }
-    return ref;
-  }
-  async function removeTask(task: Task, moveFocus = false) {
-    if (removingTasks.current.has(task.id) || savingTitles.current.has(task.id)) return;
-    removingTasks.current.add(task.id);
-    const visible = groupTasksByDate(tasks).flatMap(section => section.data);
-    const index = visible.findIndex(item => item.id === task.id);
-    const neighbour = visible[index - 1] ?? visible[index + 1];
-    const previousId = tasks[tasks.findIndex(item => item.id === task.id) - 1]?.id ?? null;
-    try {
-      await mutate(async () => {
-        await api.remove(task.id);
-        setTasks(list => list.filter(item => item.id !== task.id));
-        setEditing(current => current === task.id ? null : current);
-        setDueEditor(current => current === task.id ? null : current);
-        setNewAfter(current => current === task.id ? null : current);
-        taskInputs.current.delete(task.id);
-        if (moveFocus && focusedTask.current === task.id && neighbour) {
-          focusedTask.current = null;
-          taskInputs.current.get(neighbour.id)?.current?.focus();
-        }
-        toast("Task deleted", {
-          toasterId: userId,
-          description: task.title,
-          duration: 8000,
-          action: { label: "Undo", onClick: () => void restoreTask(task, previousId) },
-        });
-      });
-    } finally { removingTasks.current.delete(task.id); }
-  }
-  async function restoreTask(task: Task, previousId: string | null) {
-    if (restoringTasks.current.has(task.id)) return;
-    restoringTasks.current.add(task.id);
-    try {
-      const restored = await api.restore(task.id);
-      setTasks(list => list.some(item => item.id === restored.id)
-        ? list.map(item => item.id === restored.id ? restored : item)
-        : insertTaskAfter(list, restored, previousId));
-      toast.success("Task restored", { toasterId: userId });
-    } catch {
-      toast.error("Could not restore task", {
-        toasterId: userId,
-        duration: 8000,
-        action: { label: "Retry", onClick: () => void restoreTask(task, previousId) },
-      });
-    } finally { restoringTasks.current.delete(task.id); }
-  }
-  async function finishEditing(task: Task, deleteEmpty = false) {
-    if (editing !== task.id || savingTitles.current.has(task.id) || removingTasks.current.has(task.id)) return null;
-    if (deleteEmpty && !editTitle.trim()) {
-      await removeTask(task);
-      return null;
-    }
-    if (editParsed.error || !editParsed.title) {
-      setError(editParsed.error || "Add a task title as well as a deadline.");
-      return null;
-    }
-    if (editParsed.title === task.title && !editParsed.matches.length) {
-      setEditing((current) => (current === task.id ? null : current));
-      return task;
-    }
-    savingTitles.current.add(task.id);
-    try {
-      return await update(task, {
-        title: editParsed.title,
-        ...(editParsed.matches.length ? editParsed.due : {}),
-      });
-    } finally {
-      savingTitles.current.delete(task.id);
-    }
-  }
-  async function submitExisting(task: Task) {
-    const saved = await finishEditing(task);
-    if (!saved) return;
-    setTitle("");
-    setNewLiteralRanges([]);
-    setNewDue(saved);
-    setNewReference(new Date());
-    setNewAfter(saved.id);
-    setDueEditor(null);
-    setAdding(true);
-  }
-  async function saveDue(task: Task, due: Due) {
-    const extractedTitle =
-      editing === task.id && editParsed.matches.length
-        ? editParsed.title
-        : null;
-    await mutate(async () => {
-      const saved = await api.update(task.id, {
-        dueKind: due.dueKind,
-        dueAt: due.dueAt,
-        timeZone: due.timeZone,
-      });
-      setTasks((list) =>
-        list.map((task) => (task.id === saved.id ? saved : task)),
-      );
-      setDueEditor((current) => (current === task.id ? null : current));
-      if (extractedTitle !== null) {
-        setEditTitle(extractedTitle);
-        setEditLiteralRanges([{ start: 0, end: extractedTitle.length }]);
-      }
-    }, true);
-  }
-  async function addTask() {
-    if (creatingTask.current || busy || loading || offline || !title.trim()) return;
-    if (newParsed.error || !newParsed.title) {
-      setError(newParsed.error || "Add a task title as well as a deadline.");
-      return;
-    }
-    const draft = newParsed;
-    creatingTask.current = true;
-    try {
-      await mutate(async () => {
-        const saved = await api.create({ title: draft.title, ...draft.due });
-        setTasks((list) => insertTaskAfter(list, saved, newAfter));
-        setTitle("");
-        setNewLiteralRanges([]);
-        setNewDue(newAfter ? saved : noDue);
-        if (newAfter) setNewAfter(saved.id);
-        setNewReference(new Date());
-        setAdding(newTaskFocused.current);
-        setDueEditor(null);
-        if (newTaskFocused.current) newTaskInput.current?.focus();
-      });
-    } finally { creatingTask.current = false; }
-  }
-  function beginEditing(task: Task) {
-    setError("");
-    setEditing(task.id);
-    setEditTitle(task.title);
-    setEditLiteralRanges([{ start: 0, end: task.title.length }]);
-    setEditReference(new Date());
-    setDueEditor(null);
-  }
-  function cancelEditing() {
-    setError("");
-    setEditing(null);
-    setDueEditor(null);
-  }
-  function beginAdding() {
-    setError("");
-    if (!title) {
-      setNewReference(new Date());
-      setNewDue(noDue);
-      setNewAfter(null);
-    }
-    setAdding(true);
-  }
-  function closeAdding() {
-    newTaskFocused.current = false;
-    setAdding(false);
-  }
-  const composerAnchor = tasks.some(task => task.id === newAfter) ? newAfter : null;
-  const newTaskRow = adding ? (
-    <TaskEditBoundary active={dueEditor !== "new"} onOutside={closeAdding}>
-      <YStack bg="background">
-        <XStack items="center" gap="3" pt="1" pb="0">
-          <Checkbox disabled aria-hidden={true} />
-          <TaskTitleInput
-            inputRef={newTaskInput}
-            aria-label="New task"
-            placeholder="New task"
-            autoFocus
-            autoFocusNative
-            readOnly={busy}
-            highlights={newParsed.matches}
-            onFocus={() => { newTaskFocused.current = true; }}
-            onBlur={() => { newTaskFocused.current = false; }}
-            maxLength={300}
-            value={title}
-            onChangeText={(text) => {
-              setNewLiteralRanges(ranges => preserveLiteralRanges(title, text, ranges));
-              setTitle(text);
-              setError("");
-            }}
-            onSubmitEditing={() => void addTask()}
-            onEmptyBackspace={() => {
-              closeAdding();
-              if (newAfter) taskInputs.current.get(newAfter)?.current?.focus();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") closeAdding();
-            }}
-            enterKeyHint="enter"
-            returnKeyType="default"
-            submitBehavior="submit"
-            blurOnSubmit={false}
-            flex={1}
-            minW={0}
-          />
-        </XStack>
-        <XStack pb="2" pl="9">
-          <DueChip
-            due={newParsed.due}
-            label="Set new task due date"
-            editing
-            disabled={busy}
-            onPress={() => setDueEditor(dueEditor === "new" ? null : "new")}
-          />
-        </XStack>
-      </YStack>
-    </TaskEditBoundary>
-  ) : null;
-  const sections = groupTasksByDate(tasks);
+  const controller = useTaskController(userId);
+  const composer = controller.adding ? <TaskComposer {...controller.composer} /> : null;
+  const { dueDialog } = controller;
+
   return (
     <OutsideEditProvider>
       <YStack flex={1} bg="background">
         <SafeAreaView style={{ flex: 1 }}>
-          <Head>
-            <title>Dodo</title>
-          </Head>
+          <Head><title>Dodo</title></Head>
           <YStack flex={1} w="100%" maxW={900} self="center" px="6" py="4" gap="4">
             <XStack items="center" justify="space-between" gap="3">
               <Brand />
@@ -404,35 +34,18 @@ export default function Tasks({ userId }: { userId: string }) {
             </XStack>
             <XStack items="center" gap="2">
               <H3>Tasks</H3>
-              <CountChip count={tasks.length} />
+              <CountChip count={controller.tasks.length} />
             </XStack>
-            {!!visibleError && (
-              <YStack
-                theme="red"
-                bg="background"
-                p="3"
-                rounded="md"
-                gap="3"
-                role="alert"
-              >
-                <Paragraph>{visibleError}</Paragraph>
-                <Button
-                  icon={RotateCw}
-                  onPress={() => {
-                    setLoading(true);
-                    void load();
-                  }}
-                >
-                  Retry
-                </Button>
+            {!!controller.visibleError && (
+              <YStack theme="red" bg="background" p="3" rounded="md" gap="3" role="alert">
+                <Paragraph>{controller.visibleError}</Paragraph>
+                <Button icon={RotateCw} onPress={controller.reload}>Retry</Button>
               </YStack>
             )}
-            {composerAnchor === null && newTaskRow}
-            {loading ? (
-              <Spinner aria-label="Loading tasks" />
-            ) : (
+            {controller.composerAnchor === null && composer}
+            {controller.loading ? <Spinner aria-label="Loading tasks" /> : (
               <SectionList
-                sections={sections}
+                sections={controller.sections}
                 stickySectionHeadersEnabled={false}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ paddingBottom: 96 }}
@@ -442,172 +55,42 @@ export default function Tasks({ userId }: { userId: string }) {
                     <CountChip count={section.data.length} small />
                   </XStack>
                 )}
-                keyExtractor={(task) => task.id}
+                keyExtractor={task => task.id}
                 ListEmptyComponent={
                   <YStack py="6">
-                    <Paragraph>
-                      {offline ? "Tasks unavailable offline" : "No tasks"}
-                    </Paragraph>
+                    <Paragraph>{controller.offline ? "Tasks unavailable offline" : "No tasks"}</Paragraph>
                   </YStack>
                 }
                 renderItem={({ item }) => (
                   <>
-                  <TaskEditBoundary
-                    active={editing === item.id && dueEditor !== item.id}
-                    onOutside={() => void finishEditing(item, true)}
-                  >
-                    <YStack bg="background">
-                      <XStack items="center" gap="3" pt="1" pb="0">
-                        <Checkbox
-                          aria-label={`Complete ${item.title}`}
-                          checked={item.completedAt !== null}
-                          disabled={busy}
-                          onCheckedChange={(checked) =>
-                            void update(item, {
-                              completedAt:
-                                checked === true
-                                  ? new Date().toISOString()
-                                  : null,
-                            })
-                          }
-                        >
-                          <Checkbox.Indicator>
-                            <CompletionIcon />
-                          </Checkbox.Indicator>
-                        </Checkbox>
-                        <TaskTitleInput
-                          inputRef={taskInputRef(item.id)}
-                          aria-label={`Task title: ${item.title}`}
-                          readOnly={busy}
-                          maxLength={300}
-                          highlights={
-                            editing === item.id ? editParsed.matches : []
-                          }
-                          completed={item.completedAt !== null}
-                          value={editing === item.id ? editTitle : item.title}
-                          onFocus={() => {
-                            focusedTask.current = item.id;
-                            if (editing !== item.id) beginEditing(item);
-                          }}
-                          onBlur={() => {
-                            if (focusedTask.current === item.id) focusedTask.current = null;
-                          }}
-                          onChangeText={(text) => {
-                            if (editing !== item.id) {
-                              beginEditing(item);
-                              setEditLiteralRanges(preserveLiteralRanges(item.title, text, [{ start: 0, end: item.title.length }]));
-                            } else {
-                              setEditLiteralRanges(ranges => preserveLiteralRanges(editTitle, text, ranges));
-                            }
-                            setEditTitle(text);
-                            setError("");
-                          }}
-                          flex={1}
-                          minW={0}
-                          onKeyDown={(event) => {
-                            if (event.key === "Escape") cancelEditing();
-                          }}
-                          onSubmitEditing={() => {
-                            void submitExisting(item);
-                          }}
-                          onEmptyBackspace={() => void removeTask(item, true)}
-                          blurOnSubmit={false}
-                          submitBehavior="submit"
-                          enterKeyHint="enter"
-                        />
-                      </XStack>
-                      {editing === item.id && (
-                        <YStack gap="2" pb="2" pl="9">
-                          <XStack gap="2" flexWrap="wrap">
-                            <DueChip
-                              due={editParsed.due}
-                              label={`Set due date for ${item.title}`}
-                              showDate={false}
-                              editing
-                              disabled={busy}
-                              onPress={() => {
-                                setDueEditor(
-                                  dueEditor === item.id ? null : item.id,
-                                );
-                              }}
-                            />
-                            <Button
-                              size="xs"
-                              rounded="full"
-                              aria-label={`Delete ${item.title}`}
-                              icon={Trash2}
-                              disabled={busy}
-                              onPress={() => void removeTask(item)}
-                            >
-                              Delete
-                            </Button>
-                          </XStack>
-                        </YStack>
-                      )}
-                      {editing !== item.id && item.dueKind === "datetime" && (
-                        <XStack pb="2" pl="9">
-                          <DueChip
-                            due={item}
-                            label={`Set due date for ${item.title}`}
-                            showDate={false}
-                            disabled={busy}
-                            onPress={() => setDueEditor(item.id)}
-                          />
-                        </XStack>
-                      )}
-
-                    </YStack>
-                  </TaskEditBoundary>
-                  {composerAnchor === item.id && newTaskRow}
+                    <TaskRow {...controller.row(item)} />
+                    {controller.composerAnchor === item.id && composer}
                   </>
                 )}
               />
             )}
           </YStack>
         </SafeAreaView>
-        {!adding && <Button
-          position="absolute"
-          r={24 + insets.right}
-          b={24 + insets.bottom}
-          size="xl"
-          iconSize={24}
-          circular
-          theme="accent"
-          icon={Plus}
-          aria-label="Create task"
-          disabled={loading || offline || busy}
-          onPress={beginAdding}
-          shadowColor="shadow-color"
-          shadowOffset={{ width: 0, height: 4 }}
-          shadowOpacity={0.2}
-          shadowRadius={8}
-        />}
-        {dueEditor === "new" && (
-          <DueDialog
-            due={newParsed.due}
-            busy={busy}
-            onClose={() => setDueEditor(null)}
-            onSave={async (due) => {
-              if (newParsed.matches.length) {
-                setTitle(newParsed.title);
-                setNewLiteralRanges([{ start: 0, end: newParsed.title.length }]);
-              }
-              setNewDue(due);
-              setDueEditor(null);
-            }}
+        {!controller.adding && (
+          <Button
+            position="absolute"
+            r={24 + insets.right}
+            b={24 + insets.bottom}
+            size="xl"
+            iconSize={24}
+            circular
+            theme="accent"
+            icon={Plus}
+            aria-label="Create task"
+            disabled={controller.loading || controller.offline || controller.busy}
+            onPress={controller.beginAdding}
+            shadowColor="shadow-color"
+            shadowOffset={{ width: 0, height: 4 }}
+            shadowOpacity={0.2}
+            shadowRadius={8}
           />
         )}
-        {tasks
-          .filter((task) => task.id === dueEditor)
-          .map((task) => (
-            <DueDialog
-              key={task.id}
-              due={editing === task.id ? editParsed.due : task}
-              busy={busy}
-              onClose={() => setDueEditor(null)}
-              onSave={(due) => saveDue(task, due)}
-            />
-          ))}
+        {dueDialog && <DueDialog key={dueDialog.key} due={dueDialog.due} busy={dueDialog.busy} onClose={dueDialog.onClose} onSave={dueDialog.onSave} />}
       </YStack>
     </OutsideEditProvider>
   );

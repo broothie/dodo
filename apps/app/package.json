@@ -35,6 +35,7 @@
     "tamagui": "^3.3.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/react": "~19.3.0",
     "typescript": "~6.0.3"
   },

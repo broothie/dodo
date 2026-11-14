@@ -24,9 +24,12 @@ For native development, use `npm run dev:app` and set `EXPO_PUBLIC_API_URL` to y
 - `apps/app`: Tamagui controls and theme configuration, with Expo Router screens using React Native components, shared across web, iOS, and Android.
 - `apps/api`: Workers API, generated Cloudflare binding types, D1 migrations, and static frontend hosting.
 - `packages/shared`: task model, request validation, and a fetch-based API client.
-- `tests`: validation tests and API integration smoke test.
+- `apps/app/src/components`: task screen layout, task rows/composer, shared controls, auth, and settings. Platform-specific controls use `.web.tsx` siblings.
+- `apps/app/src/hooks/use-task-controller.ts`: task loading/mutations, editing drafts, Undo, and keyboard focus coordination.
+- `apps/app/src/lib`: non-visual task edit decisions, grouping, keyboard guards, and platform integrations.
+- `tests`: unit tests and API integration smoke tests; `tests/e2e` contains Playwright browser regressions.
 
-The first version supports task creation by pressing Enter, inline title editing, completion, deletion with confirmation. Completed tasks remain in the list below incomplete tasks. It starts empty and stores real data in D1.
+The app supports task creation by pressing Enter, inline title editing, completion, and immediate deletion with Undo. Tasks are grouped by date, with completed tasks below incomplete tasks. It starts empty and stores real data in D1.
 
 ## Accounts
 
@@ -56,11 +59,22 @@ Production web exports include an app manifest, generated 192px/512px icons, and
 npm run typecheck
 npm run lint
 npm test
+npm run test:coverage
 npm run build
+# One-time browser setup:
+npm exec -- playwright install chromium
+# Builds the app, then runs desktop and mobile Chromium checks:
+npm run test:e2e
+# Reuse an already current build:
+npm run test:e2e:built
 # With the app running on port 8787:
 node --experimental-strip-types tests/api-smoke.mts
 node --experimental-strip-types tests/passwordless-smoke.mts
 ```
+
+Playwright starts a separate loopback server on port 8790 with a real local Worker, fresh D1 migrations in a temporary directory, test-only auth secrets, and captured emails. Each test uses its own account. It does not use your development database, credentials, or Resend. Temporary databases and mail are discarded when the server stops. Ports 8790 and 8792 must be free; normal development on 8787 can stay running. Tests cover Enter/focus, deadline inheritance and extraction, autosave, deletion/Undo, due-dialog cancellation/clearing, save failures, anonymous-session revalidation, appearance persistence, and sign-out. Service workers are blocked in this suite to isolate application behavior.
+
+The `Checks` GitHub Actions workflow runs typechecking (including browser tests), lint, unit tests, the production web build, and Playwright on pull requests and pushes to main. These are separate from Cloudflare's deployment checks. `test:coverage` reports V8 coverage for modules exercised by unit tests; its percentage is not whole-app coverage. Native devices, Safari, and service-worker/offline lifecycle behavior still require separate coverage.
 
 ## Cloudflare deployment
 
